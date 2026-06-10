@@ -207,18 +207,28 @@ tab1, tab2 = st.tabs(["📈 Live Model", "📊 Backtesting"])
 # TAB 1: LIVE MODEL
 # ----------------------------------------------------
 with tab1:
-    st.header("🔍 AI Research Prompt Generator")
+    if "config_match" not in st.session_state:
+        st.session_state.config_match = ""
+    if "config_competition" not in st.session_state:
+        st.session_state.config_competition = ""
+    if "config_phase" not in st.session_state:
+        st.session_state.config_phase = "Group"
+    if "config_betting_house" not in st.session_state:
+        st.session_state.config_betting_house = ""
+
+    st.header("1. AI Research Prompt Generator")
+    st.markdown("Fill in the match details, click GENERATE / UPDATE AI PROMPT, send the generated prompt to your AI assistant, then paste the returned CSV into the Market CSV Input section.")
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        prompt_match = st.text_input("Match", "Spain vs France", key="prompt_match_input")
-        prompt_competition = st.text_input("Competition", "FIFA World Cup", key="prompt_comp_input")
+        prompt_match = st.text_input("Match", placeholder="Example: Mexico vs South Africa", key="prompt_match_input")
+        prompt_competition = st.text_input("Competition", placeholder="Example: FIFA World Cup 2026", key="prompt_comp_input")
         prompt_phase = st.selectbox("Phase", ["Group", "Knockout", "Semifinal", "Final"], key="prompt_phase_input")
     with col_p2:
-        prompt_house = st.text_input("Betting house preference", "Winamax", key="prompt_house_input")
+        prompt_house = st.text_input("Betting house preference", placeholder="Example: Winamax", key="prompt_house_input")
         prompt_markets = st.text_area(
             "Markets to analyze",
-            value="1X2, corners, cards, goals, both teams to score, handicaps, shots",
+            placeholder="Example: 1X2, double chance, goals, corners, cards, shots, handicaps",
             height=125,
             key="prompt_markets_input"
         )
@@ -260,6 +270,12 @@ Please be conservative with:
 - cards totals without referee information."""
         st.session_state.generated_prompt = prompt_text
         st.session_state.generated_prompt_area = prompt_text
+        
+        # Connect AI Research Prompt Generator with Parameters & Configuration
+        st.session_state.config_match = prompt_match
+        st.session_state.config_competition = prompt_competition
+        st.session_state.config_phase = prompt_phase
+        st.session_state.config_betting_house = prompt_house
 
     st.text_area(
         "Generated AI Research Prompt",
@@ -276,20 +292,20 @@ Please be conservative with:
     )
     st.markdown("---")
 
-    st.header("1. Parameters & Configurations")
+    st.header("2. Parameters & Configuration")
 
     # Inputs organized in 3 columns
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        match = st.text_input("Match", "Spain vs France")
-        competition = st.text_input("Competition", "Euro")
-        phase = st.selectbox("Phase", ["Group", "Knockout", "Semifinal", "Final"])
+        match = st.text_input("Match / Partido", placeholder="Example: Mexico vs South Africa", key="config_match")
+        competition = st.text_input("Competition", placeholder="Example: FIFA World Cup 2026", key="config_competition")
+        phase = st.selectbox("Phase", ["Group", "Knockout", "Semifinal", "Final"], key="config_phase")
 
     with col2:
-        betting_house = st.text_input("Betting house", "Winamax")
-        reliability = st.selectbox("Reliability", ["High", "Medium", "Low"])
-        model_mode = st.selectbox("Model mode", ["Balanced", "Conservative", "Aggressive"])
+        betting_house = st.text_input("Betting house", placeholder="Example: Winamax", key="config_betting_house")
+        reliability = st.selectbox("Reliability", ["High", "Medium", "Low"], key="config_reliability")
+        model_mode = st.selectbox("Model mode", ["Conservative", "Balanced", "Aggressive"], key="config_model_mode")
 
     with col3:
         bankroll = st.number_input("Bankroll (€)", min_value=1.0, value=100.0, step=10.0)
@@ -306,7 +322,7 @@ Please be conservative with:
         unsafe_allow_html=True
     )
 
-    st.header("2. Markets Input")
+    st.header("3. Market CSV Input")
     st.markdown("""
     Paste your markets in CSV format. The CSV must contain exactly these columns:
     `Market`, `Odds`, `Probability`, `Risk`, `Uncertainty`, `Type`
@@ -357,7 +373,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
         except Exception as e:
             st.error(f"Error parsing CSV file: {str(e)}")
 
-    st.header("3. Execution of Value Model")
+    st.header("4. Model Results")
 
     # Run the model
     if st.button("RUN VALUE MODEL", use_container_width=True):

@@ -9,73 +9,141 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+
 .stApp {
+
     background-color: #0E1117;
+
     color: white;
+
 }
 
 .big-title {
+
     font-size: 44px;
+
     font-weight: 900;
+
     color: #00FF9C;
+
     margin-bottom: 0px;
+
 }
 
 .subtitle {
+
     font-size: 18px;
+
     color: #C9D1D9;
+
     margin-bottom: 20px;
+
 }
 
 .module {
+
     background-color: #161B22;
+
     padding: 18px;
+
     border-radius: 14px;
+
     border: 1px solid #30363D;
+
     margin-bottom: 12px;
+
 }
 
 .formula {
+
     background-color: #161B22;
+
     padding: 20px;
+
     border-radius: 14px;
+
     border-left: 5px solid #00FF9C;
+
     font-size: 18px;
+
     color: #E6EDF3;
+
 }
 
 .small-text {
+
     color: #8B949E;
+
     font-size: 14px;
+
 }
 
 .status-ok {
+
     color: #00FF9C;
+
     font-weight: bold;
+
 }
 
 .status-warn {
+
     color: #FFD166;
+
     font-weight: bold;
+
 }
 
 .status-bad {
+
     color: #FF5C5C;
+
     font-weight: bold;
+
 }
+
+/* Texto de etiquetas de inputs */
+
+label, .stTextInput label, .stNumberInput label, .stSelectbox label, .stSlider label {
+
+    color: white !important;
+
+}
+
+/* Texto general */
+
+.stMarkdown, .stText, p, span, div {
+
+    color: white;
+
+}
+
+/* Texto de ayuda y captions */
+
+small, .stCaption, [data-testid="stCaptionContainer"] {
+
+    color: #C9D1D9 !important;
+
+}
+
+/* Texto dentro de inputs */
+
+input, textarea {
+
+    color: white !important;
+
+}
+
+/* Selectbox */
+
+div[data-baseweb="select"] > div {
+
+    color: white !important;
+
+}
+
 </style>
-""", unsafe_allow_html=True)
 
-st.markdown('<div class="big-title">SVE — Statistical Value Engine</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Football Market Expected Value Model</div>', unsafe_allow_html=True)
-
-st.markdown("""
-<div class="formula">
-<b>Modelo matemático:</b><br><br>
-EV* = [(P estimada − λ × Incertidumbre − ρ × Riesgo) × Cuota] − 1
-<br><br>
-<b>Regla:</b> apostar solo si el valor esperado ajustado supera el umbral mínimo exigido.
-</div>
 """, unsafe_allow_html=True)
 
 st.divider()

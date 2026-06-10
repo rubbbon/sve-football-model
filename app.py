@@ -141,7 +141,83 @@ div[data-baseweb="select"] > div {
     color: white !important;
 
 }
+/* Etiquetas de los campos */
+label, .stTextInput label, .stNumberInput label, .stSelectbox label, .stSlider label, .stTextArea label {
+    color: white !important;
+    font-weight: 600 !important;
+}
 
+/* Recuadros de texto */
+.stTextInput input {
+    background-color: #E63946 !important;
+    color: black !important;
+    border: 2px solid #FF6B6B !important;
+    border-radius: 10px !important;
+}
+
+/* Recuadros numéricos */
+.stNumberInput input {
+    background-color: #E63946 !important;
+    color: black !important;
+    border: 2px solid #FF6B6B !important;
+    border-radius: 10px !important;
+}
+
+/* Recuadro grande para CSV */
+.stTextArea textarea {
+    background-color: #E63946 !important;
+    color: black !important;
+    border: 2px solid #FF6B6B !important;
+    border-radius: 10px !important;
+}
+
+/* Placeholder dentro de inputs */
+.stTextInput input::placeholder,
+.stNumberInput input::placeholder,
+.stTextArea textarea::placeholder {
+    color: black !important;
+    opacity: 0.7 !important;
+}
+
+/* Selectbox cerrado */
+div[data-baseweb="select"] > div {
+    background-color: #E63946 !important;
+    color: black !important;
+    border: 2px solid #FF6B6B !important;
+    border-radius: 10px !important;
+}
+
+/* Texto dentro del selectbox */
+div[data-baseweb="select"] span {
+    color: black !important;
+}
+
+/* Flecha del selectbox */
+div[data-baseweb="select"] svg {
+    fill: black !important;
+}
+
+/* Opciones desplegadas del selectbox */
+div[data-baseweb="popover"] {
+    background-color: #E63946 !important;
+}
+
+div[data-baseweb="popover"] li {
+    background-color: #E63946 !important;
+    color: black !important;
+}
+
+/* Sliders */
+.stSlider label {
+    color: white !important;
+}
+
+/* Botones + y - de number input */
+button[kind="secondary"] {
+    background-color: #E63946 !important;
+    color: black !important;
+    border: 1px solid #FF6B6B !important;
+}
 </style>
 
 """, unsafe_allow_html=True)

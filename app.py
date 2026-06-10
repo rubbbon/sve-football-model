@@ -334,12 +334,43 @@ with tab1:
         else:
             prompt_house = prompt_house_choice
 
-        prompt_markets = st.text_area(
-            "Markets to analyze",
-            placeholder="Example: 1X2, double chance, goals, corners, cards, shots, handicaps",
-            height=125,
-            key="prompt_markets_input"
+        prompt_preset = st.selectbox(
+            "Market analysis preset",
+            [
+                "Complete analysis",
+                "Conservative / safe picks",
+                "Main result markets",
+                "Goals",
+                "Corners",
+                "Cards",
+                "Shots",
+                "Handicaps",
+                "Custom"
+            ],
+            key="prompt_market_preset"
         )
+        st.caption("Choose Complete analysis for a full model review, or select a specific area such as Goals, Corners, Cards or Shots.")
+        
+        preset_mapping = {
+            "Complete analysis": "1X2, double chance, draw no bet, goals, under/over 2.5, under/over 3.5, both teams to score, team goals, corners, team corners, cards, team cards, shots, shots on target, handicaps, Asian handicaps",
+            "Conservative / safe picks": "double chance, draw no bet, under/over 3.5 goals, team under/over goals, team corners, team cards, low-risk handicaps",
+            "Main result markets": "1X2, double chance, draw no bet, halftime/fulltime, team to score first, win to nil",
+            "Goals": "goals, under/over 1.5, under/over 2.5, under/over 3.5, both teams to score, team goals, clean sheet, win to nil",
+            "Corners": "total corners, under/over corners, team corners, corner handicap, first half corners",
+            "Cards": "total cards, team cards, most cards, player cards if lineups are available, cards handicap",
+            "Shots": "total shots, team shots, shots on target, player shots if lineups are available, player shots on target if lineups are available",
+            "Handicaps": "European handicaps, Asian handicaps, favorite handicap, underdog positive handicap, low-risk handicap lines"
+        }
+        
+        if prompt_preset == "Custom":
+            prompt_markets = st.text_area(
+                "Custom markets to analyze",
+                placeholder="Example: Spain corners, Cape Verde cards, Spain over 1.5 goals",
+                height=125,
+                key="prompt_markets_custom"
+            )
+        else:
+            prompt_markets = preset_mapping[prompt_preset]
     
     if "generated_prompt" not in st.session_state:
         st.session_state.generated_prompt = ""

@@ -203,6 +203,60 @@ st.markdown('<div class="subtitle">Football expected value model & quantitative 
 # Define Tabs
 tab1, tab2 = st.tabs(["📈 Live Model", "📊 Backtesting"])
 
+def clean_match_name(text):
+    if not text:
+        return ""
+    
+    # Clean extra spaces
+    text = " ".join(text.split())
+    
+    # Standardize separators
+    import re
+    # Replace " against " (case-insensitive) with " vs "
+    text = re.sub(r'\s+against\s+', ' vs ', text, flags=re.IGNORECASE)
+    # Replace " - " or "-" with " vs "
+    text = re.sub(r'\s*-\s*', ' vs ', text)
+    # Replace " v " or " V " with " vs "
+    text = re.sub(r'\s+[vV]\s+', ' vs ', text)
+    
+    # If no "vs" (case-insensitive) exists, check if it's two words
+    if not re.search(r'\bvs\b', text, re.IGNORECASE):
+        words = text.split()
+        if len(words) == 2:
+            text = f"{words[0]} vs {words[1]}"
+            
+    # Dictionary to translate common Spanish team names
+    translations = {
+        "españa": "Spain",
+        "cabo verde": "Cape Verde",
+        "méxico": "Mexico",
+        "mexico": "Mexico",
+        "sudáfrica": "South Africa",
+        "sudafrica": "South Africa",
+        "estados unidos": "United States",
+        "alemania": "Germany",
+        "francia": "France",
+        "inglaterra": "England",
+        "argentina": "Argentina",
+        "brasil": "Brazil",
+        "portugal": "Portugal",
+        "italia": "Italy",
+        "marruecos": "Morocco",
+        "japón": "Japan",
+        "japon": "Japan",
+        "corea del sur": "South Korea"
+    }
+    
+    # Translate using word boundary substitutions
+    for spanish, english in translations.items():
+        pattern = r'\b' + re.escape(spanish) + r'\b'
+        text = re.sub(pattern, english, text, flags=re.IGNORECASE)
+        
+    # Standardize casing for "vs" (ensure it is lower case "vs" with correct spacing)
+    text = re.sub(r'\s+[vV][sS]\s+', ' vs ', text)
+    
+    return " ".join(text.split())
+
 # ----------------------------------------------------
 # TAB 1: LIVE MODEL
 # ----------------------------------------------------
@@ -221,11 +275,65 @@ with tab1:
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        prompt_match = st.text_input("Match", placeholder="Example: Mexico vs South Africa", key="prompt_match_input")
-        prompt_competition = st.text_input("Competition", placeholder="Example: FIFA World Cup 2026", key="prompt_comp_input")
+        prompt_match = st.text_input("Match", placeholder="Example: Spain vs Cape Verde", key="prompt_match_input")
+        st.caption("You can write it normally, for example: Spain vs Cape Verde, Spain - Cape Verde, or Spain Cape Verde.")
+        
+        prompt_competition_choice = st.selectbox(
+            "Competition",
+            [
+                "FIFA World Cup 2026",
+                "UEFA Euro",
+                "Copa América",
+                "Africa Cup of Nations",
+                "UEFA Champions League",
+                "UEFA Europa League",
+                "UEFA Conference League",
+                "Premier League",
+                "LaLiga",
+                "Serie A",
+                "Bundesliga",
+                "Ligue 1",
+                "Other"
+            ],
+            key="prompt_comp_select"
+        )
+        if prompt_competition_choice == "Other":
+            prompt_competition = st.text_input(
+                "Custom competition",
+                placeholder="Example: International Friendly",
+                key="prompt_comp_custom"
+            )
+        else:
+            prompt_competition = prompt_competition_choice
+            
         prompt_phase = st.selectbox("Phase", ["Group", "Knockout", "Semifinal", "Final"], key="prompt_phase_input")
     with col_p2:
-        prompt_house = st.text_input("Betting house preference", placeholder="Example: Winamax", key="prompt_house_input")
+        prompt_house_choice = st.selectbox(
+            "Betting house preference",
+            [
+                "Winamax",
+                "Bet365",
+                "Codere",
+                "Betfair",
+                "Bwin",
+                "Marathonbet",
+                "1xBet",
+                "Betway",
+                "William Hill",
+                "Pinnacle",
+                "Other"
+            ],
+            key="prompt_house_select"
+        )
+        if prompt_house_choice == "Other":
+            prompt_house = st.text_input(
+                "Custom betting house",
+                placeholder="Example: Sportium",
+                key="prompt_house_custom"
+            )
+        else:
+            prompt_house = prompt_house_choice
+
         prompt_markets = st.text_area(
             "Markets to analyze",
             placeholder="Example: 1X2, double chance, goals, corners, cards, shots, handicaps",
@@ -237,7 +345,9 @@ with tab1:
         st.session_state.generated_prompt = ""
 
     if st.button("GENERATE / UPDATE AI PROMPT", use_container_width=True):
-        prompt_text = f"""Please search current information about the football match "{prompt_match}" in the "{prompt_competition}" ({prompt_phase} phase).
+        cleaned_match = clean_match_name(prompt_match)
+        
+        prompt_text = f"""Please search current information about the football match "{cleaned_match}" in the "{prompt_competition}" ({prompt_phase} phase).
 Review odds, lineups, injuries, suspensions, recent form, FIFA ranking or Elo, tactical context, referee if available, corners, cards, goals and shots. Use "{prompt_house}" as the betting house preference if possible.
 
 Based on your research and analysis, estimate probabilities for the following markets: {prompt_markets}
@@ -271,8 +381,11 @@ Please be conservative with:
         st.session_state.generated_prompt = prompt_text
         st.session_state.generated_prompt_area = prompt_text
         
+        # Update Prompt Generator widget field to the cleaned name
+        st.session_state.prompt_match_input = cleaned_match
+        
         # Connect AI Research Prompt Generator with Parameters & Configuration
-        st.session_state.config_match = prompt_match
+        st.session_state.config_match = cleaned_match
         st.session_state.config_competition = prompt_competition
         st.session_state.config_phase = prompt_phase
         st.session_state.config_betting_house = prompt_house

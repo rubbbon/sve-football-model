@@ -104,80 +104,58 @@ st.divider()
 st.header("2. Mercados a analizar")
 
 st.markdown("""
-Introduce los mercados manualmente.  
-Ejemplos: **España gana**, **Más de 8.5 córners**, **Francia más tarjetas**, **Under 2.5 goles**, **Ambos marcan: sí**.
+Puedes introducir los mercados de dos formas:
+
+1. Pegando una tabla en bloque.
+2. Usando el ejemplo y cambiando los datos.
+
+Formato obligatorio:
+
+Mercado,Cuota,Probabilidad,Riesgo,Incertidumbre,Tipo
 """)
 
-num_markets = st.slider("Número de mercados", 1, 10, 4)
+ejemplo_csv = """Mercado,Cuota,Probabilidad,Riesgo,Incertidumbre,Tipo
+Under 2.5 goles,1.80,66,8,8,Bajo
+España gana,2.10,48,18,16,Medio
+Más de 8.5 córners,1.85,61,12,10,Medio
+Francia over 1.5 tarjetas,1.90,60,15,12,Medio"""
+
+markets_text = st.text_area(
+    "Pega aquí los mercados en formato CSV",
+    value=ejemplo_csv,
+    height=220
+)
 
 markets = []
 
-for i in range(num_markets):
-    st.markdown(f"### Mercado {i+1}")
-    c1, c2, c3, c4 = st.columns(4)
+try:
+    from io import StringIO
 
-    with c1:
-        mercado = st.text_input(
-            f"Nombre del mercado {i+1}",
-            f"Mercado {i+1}",
-            key=f"mercado_{i}"
-        )
-        cuota = st.number_input(
-            f"Cuota {i+1}",
-            min_value=1.01,
-            value=1.80,
-            step=0.01,
-            key=f"cuota_{i}"
-        )
+    df_input = pd.read_csv(StringIO(markets_text))
 
-    with c2:
-        prob_estimada = st.slider(
-            f"Probabilidad estimada (%) {i+1}",
-            1,
-            99,
-            55,
-            key=f"prob_{i}"
-        )
-        riesgo = st.slider(
-            f"Riesgo (%) {i+1}",
-            0,
-            60,
-            10,
-            key=f"riesgo_{i}"
-        )
+    columnas_necesarias = ["Mercado", "Cuota", "Probabilidad", "Riesgo", "Incertidumbre", "Tipo"]
 
-    with c3:
-        incertidumbre = st.slider(
-            f"Incertidumbre (%) {i+1}",
-            0,
-            60,
-            10,
-            key=f"incertidumbre_{i}"
-        )
-        tipo_riesgo = st.selectbox(
-            f"Tipo de riesgo {i+1}",
-            ["Bajo", "Medio", "Alto"],
-            key=f"tipo_{i}"
-        )
+    if all(col in df_input.columns for col in columnas_necesarias):
+        st.success("Mercados cargados correctamente.")
 
-    with c4:
-        mercado_valido = st.checkbox(
-            f"Incluir mercado {i+1}",
-            value=True,
-            key=f"valid_{i}"
-        )
+        st.dataframe(df_input, use_container_width=True)
 
-    if mercado_valido:
-        markets.append({
-            "Mercado": mercado,
-            "Cuota": cuota,
-            "Probabilidad estimada": prob_estimada / 100,
-            "Riesgo": riesgo / 100,
-            "Incertidumbre": incertidumbre / 100,
-            "Tipo de riesgo": tipo_riesgo
-        })
+        for _, row in df_input.iterrows():
+            markets.append({
+                "Mercado": str(row["Mercado"]),
+                "Cuota": float(row["Cuota"]),
+                "Probabilidad estimada": float(row["Probabilidad"]) / 100,
+                "Riesgo": float(row["Riesgo"]) / 100,
+                "Incertidumbre": float(row["Incertidumbre"]) / 100,
+                "Tipo de riesgo": str(row["Tipo"])
+            })
 
-st.divider()
+    else:
+        st.error("Faltan columnas. Usa exactamente: Mercado, Cuota, Probabilidad, Riesgo, Incertidumbre, Tipo")
+
+except Exception as e:
+    st.error("Error al leer los mercados. Revisa que el formato sea correcto.")
+    st.code(str(e))
 
 st.header("3. Ejecución del modelo")
 

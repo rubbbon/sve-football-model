@@ -6,10 +6,12 @@ import json
 import time
 import datetime
 import re
+import altair as alt
 
 # Favorites database file
 FAVORITES_FILE = "favorites.json"
 PORTFOLIO_FILE = "portfolio.json"
+STUDIED_MATCHES_FILE = "studied_matches.json"
 
 def load_favorites():
     if "favorites" not in st.session_state:
@@ -47,9 +49,28 @@ def save_portfolio():
     except Exception:
         pass
 
+def load_studied_matches():
+    if "studied_matches" not in st.session_state:
+        if os.path.exists(STUDIED_MATCHES_FILE):
+            try:
+                with open(STUDIED_MATCHES_FILE, "r", encoding="utf-8") as f:
+                    st.session_state.studied_matches = json.load(f)
+            except Exception:
+                st.session_state.studied_matches = []
+        else:
+            st.session_state.studied_matches = []
+
+def save_studied_matches():
+    try:
+        with open(STUDIED_MATCHES_FILE, "w", encoding="utf-8") as f:
+            json.dump(st.session_state.studied_matches, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
 # Load databases at startup
 load_favorites()
 load_portfolio()
+load_studied_matches()
 
 def translate_market_to_spanish(market: str) -> str:
     if not market:
@@ -149,9 +170,214 @@ def get_probability_benefit_relation(probability: float, odds: float) -> str:
         else:
             return "Apuesta conservadora con beneficio bajo"
 
+def classify_bet_type(market: str, combined_bet: bool) -> str:
+    if combined_bet:
+        return "Combinada"
+    m = market.lower()
+    if "goal" in m or "gol" in m or "score" in m:
+        return "Goles"
+    elif "corner" in m or "córner" in m or "corners" in m:
+        return "Córners"
+    elif "card" in m or "tarjeta" in m or "cards" in m:
+        return "Tarjetas"
+    elif "handicap" in m or "hándicap" in m or "asiático" in m or "asiatico" in m:
+        return "Hándicap"
+    elif "win" in m or "draw" in m or "1x2" in m or "empate" in m or "doble op" in m or "chance" in m or "no bet" in m or "gana" in m:
+        return "Resultado"
+    else:
+        return "Otro"
+
+def save_or_update_studied_match(match, competition, phase, betting_house, presets, custom_markets="", csv_data=None, recommendations=None):
+    if not match:
+        return
+    load_studied_matches()
+    existing_entry = None
+    for entry in st.session_state.studied_matches:
+        if entry.get("match", "").lower() == match.lower():
+            existing_entry = entry
+            break
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if existing_entry:
+        existing_entry["last_updated"] = now_str
+        existing_entry["competition"] = competition
+        existing_entry["phase"] = phase
+        existing_entry["betting_house"] = betting_house
+        existing_entry["selected_market_presets"] = presets
+        if custom_markets:
+            existing_entry["custom_markets"] = custom_markets
+        if csv_data is not None:
+            existing_entry["last_csv"] = csv_data
+        if recommendations is not None:
+            existing_entry["last_recommendations"] = recommendations
+    else:
+        new_entry = {
+            "match": match,
+            "sport": "Fútbol",
+            "date_created": now_str,
+            "last_updated": now_str,
+            "competition": competition,
+            "phase": phase,
+            "betting_house": betting_house,
+            "selected_market_presets": presets,
+            "custom_markets": custom_markets,
+            "last_csv": csv_data or "",
+            "last_recommendations": recommendations or []
+        }
+        st.session_state.studied_matches.append(new_entry)
+    save_studied_matches()
+
+def calculate_balance_metrics(portfolio_list):
+    dinero_invertido = 0.0
+    beneficio_obtenido = 0.0
+    apuestas_pendientes = 0
+    apuestas_cerradas = 0
+    apuestas_ganadas = 0
+    apuestas_perdidas = 0
+    apuestas_nulas = 0
+    
+    for bet in portfolio_list:
+        stake = float(bet.get("stake", 0.0))
+        odds = float(bet.get("odds", 0.0))
+        status = bet.get("status", "Pendiente")
+        
+        dinero_invertido += stake
+        
+        if status == "Ganada":
+            profit = stake * (odds - 1.0)
+            beneficio_obtenido += profit
+            apuestas_ganadas += 1
+            apuestas_cerradas += 1
+        elif status == "Perdida":
+            profit = -stake
+            beneficio_obtenido += profit
+            apuestas_perdidas += 1
+            apuestas_cerradas += 1
+        elif status == "Nula":
+            profit = 0.0
+            beneficio_obtenido += profit
+            apuestas_nulas += 1
+            apuestas_cerradas += 1
+        else:
+            apuestas_pendientes += 1
+            
+    saldo_total = beneficio_obtenido
+    
+    closed_stake = sum(float(b.get("stake", 0.0)) for b in portfolio_list if b.get("status") in ["Ganada", "Perdida", "Nula"])
+    if closed_stake > 0:
+        roi_cerrado = (beneficio_obtenido / closed_stake) * 100.0
+    else:
+        roi_cerrado = 0.0
+        
+    return {
+        "dinero_invertido": dinero_invertido,
+        "beneficio_obtenido": beneficio_obtenido,
+        "saldo_total": saldo_total,
+        "apuestas_pendientes": apuestas_pendientes,
+        "apuestas_cerradas": apuestas_cerradas,
+        "apuestas_ganadas": apuestas_ganadas,
+        "apuestas_perdidas": apuestas_perdidas,
+        "apuestas_nulas": apuestas_nulas,
+        "roi_cerrado": roi_cerrado
+    }
+
+def prepare_chart_data(portfolio_list):
+    closed_bets = [b for b in portfolio_list if b.get("status") in ["Ganada", "Perdida", "Nula"]]
+    if not closed_bets:
+        return pd.DataFrame()
+        
+    date_data = {}
+    for b in closed_bets:
+        dp = b.get("date_placed", "")
+        if dp and len(dp) >= 10:
+            date_str = dp[:10]
+        else:
+            date_str = datetime.date.today().strftime("%Y-%m-%d")
+            
+        status = b.get("status")
+        stake = float(b.get("stake", 0.0))
+        odds = float(b.get("odds", 0.0))
+        profit = float(b.get("profit", 0.0))
+        
+        if date_str not in date_data:
+            date_data[date_str] = {"ingresos": 0.0, "gastos": 0.0, "beneficio_dia": 0.0}
+            
+        if status == "Ganada":
+            date_data[date_str]["ingresos"] += profit
+        elif status == "Perdida":
+            date_data[date_str]["gastos"] += stake
+            
+        date_data[date_str]["beneficio_dia"] += profit
+
+    sorted_dates = sorted(date_data.keys())
+    
+    chart_rows = []
+    cumulative_profit = 0.0
+    
+    if sorted_dates:
+        try:
+            first_date_dt = datetime.datetime.strptime(sorted_dates[0], "%Y-%m-%d")
+            start_date_str = (first_date_dt - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        except Exception:
+            start_date_str = "Inicio"
+            
+        chart_rows.append({
+            "Fecha": start_date_str,
+            "Ingresos": 0.0,
+            "Gastos": 0.0,
+            "Beneficio del día": 0.0,
+            "Beneficio acumulado": 0.0
+        })
+        
+    for d in sorted_dates:
+        cumulative_profit += date_data[d]["beneficio_dia"]
+        chart_rows.append({
+            "Fecha": d,
+            "Ingresos": date_data[d]["ingresos"],
+            "Gastos": date_data[d]["gastos"],
+            "Beneficio del día": date_data[d]["beneficio_dia"],
+            "Beneficio acumulado": cumulative_profit
+        })
+        
+    return pd.DataFrame(chart_rows)
+
+def render_altair_chart(df):
+    if df.empty:
+        st.info("No hay datos de apuestas finalizadas para mostrar la evolución del saldo.")
+        return
+    try:
+        chart = alt.Chart(df).mark_line(point=True, strokeWidth=3).encode(
+            x=alt.X('Fecha:O', title='Fecha', sort=None),
+            y=alt.Y('Beneficio acumulado:Q', title='Beneficio acumulado (€)'),
+            color=alt.condition(
+                alt.datum['Beneficio acumulado'] >= 0,
+                alt.value('#00C853'),
+                alt.value('#FF3B3B')
+            ),
+            tooltip=[
+                alt.Tooltip('Fecha:N', title='Fecha'),
+                alt.Tooltip('Ingresos:Q', title='Ingresos (€)', format='.2f'),
+                alt.Tooltip('Gastos:Q', title='Gastos (€)', format='.2f'),
+                alt.Tooltip('Beneficio del día:Q', title='Beneficio del día (€)', format='.2f'),
+                alt.Tooltip('Beneficio acumulado:Q', title='Beneficio acumulado (€)', format='.2f')
+            ]
+        ).properties(
+            width='container',
+            height=350
+        ).configure_view(
+            strokeWidth=0
+        ).configure_axis(
+            grid=True,
+            gridColor='#262c35',
+            labelColor='#a0aec0',
+            titleColor='#ffffff'
+        )
+        st.altair_chart(chart, use_container_width=True)
+    except Exception as e:
+        st.line_chart(df.set_index("Fecha")[["Beneficio acumulado"]], y="Beneficio acumulado")
+
 # Page configurations
 st.set_page_config(
-    page_title="CALCULADOR DE APUESTAS",
+    page_title="CALCULADORA DE APUESTAS",
     layout="wide"
 )
 
@@ -324,6 +550,154 @@ div[data-testid="stMetricLabel"] {
     font-weight: 600 !important;
 }
 
+/* Home Navigation Card Grid styling */
+.home-card div.stButton > button {
+    background-color: #0b0d10 !important;
+    color: #E30613 !important;
+    border: 1px solid #E30613 !important;
+    border-radius: 8px !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    padding: 1.5rem 1rem !important;
+    height: 90px !important;
+    text-align: center !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.3s ease !important;
+}
+.home-card div.stButton > button:hover {
+    background-color: #E30613 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 15px rgba(227, 6, 19, 0.4) !important;
+    transform: translateY(-2px) !important;
+}
+
+/* Top Right User Profile Styling */
+.top-user-box {
+    text-align: right;
+    padding: 10px;
+    background-color: #12161a;
+    border: 1px solid #262c35;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+.top-user-box div.stButton > button {
+    background-color: transparent !important;
+    color: #E30613 !important;
+    border: 1px solid #E30613 !important;
+    border-radius: 4px !important;
+    padding: 2px 10px !important;
+    font-size: 11px !important;
+    font-weight: bold !important;
+    width: auto !important;
+    text-transform: none !important;
+    letter-spacing: 0px !important;
+    margin-left: auto !important;
+    display: block !important;
+    margin-top: 5px !important;
+}
+.top-user-box div.stButton > button:hover {
+    background-color: #E30613 !important;
+    color: #ffffff !important;
+}
+
+/* Metric / Insight Cards */
+.metric-box {
+    background-color: #12161a;
+    border: 1px solid #E30613;
+    border-radius: 8px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+.metric-label {
+    font-size: 11px;
+    color: #a0aec0;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+.metric-value {
+    font-size: 24px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-top: 5px;
+}
+.mini-metric-box {
+    background-color: #12161a;
+    border: 1px solid #262c35;
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+    font-size: 13px;
+    color: #ffffff;
+}
+.insight-card {
+    background-color: #12161a;
+    border: 1px solid #E30613;
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+.insight-header {
+    font-size: 11px;
+    color: #a0aec0;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+.insight-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #E30613;
+    margin-top: 5px;
+    margin-bottom: 12px;
+}
+.insight-metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 15px;
+    font-size: 13px;
+    color: #a0aec0;
+}
+.insight-metric-grid div b {
+    color: #ffffff;
+}
+
+/* Sidebar styling overrides */
+section[data-testid="stSidebar"] {
+    background-color: #0b0d10 !important;
+    border-right: 1px solid #262c35 !important;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] label {
+    background-color: #12161a !important;
+    color: #F5F5F5 !important;
+    border: 1px solid #262c35 !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    margin-bottom: 6px !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+    border-color: #E30613 !important;
+    box-shadow: 0 0 10px rgba(227, 6, 19, 0.2) !important;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] {
+    border-color: #E30613 !important;
+    background-color: #E30613 !important;
+    color: #ffffff !important;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] span {
+    color: #ffffff !important;
+}
+
 /* Decision classes coloring */
 .status-ok {
     color: #00ff88;
@@ -342,24 +716,131 @@ div[data-testid="stMetricLabel"] {
 </style>
 """, unsafe_allow_html=True)
 
-# Main Title Section
-st.markdown('<div class="big-title">CALCULADORA DE APUESTAS</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtitle">Motor de análisis estadístico de fútbol y calculadora de combinadas de valor</div>', unsafe_allow_html=True)
+# 1. Page Intro Animation
+if "intro_seen" not in st.session_state:
+    st.markdown("""
+    <div class="intro-container" style="
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        background-color: #000000;
+        z-index: 999999;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    ">
+        <style>
+        .intro-title {
+            font-family: sans-serif;
+            font-size: 42px;
+            font-weight: 900;
+            color: #E30613;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(227, 6, 19, 0.8);
+            animation: glowSweep 1.5s ease-in-out infinite alternate;
+        }
+        .intro-line {
+            width: 180px;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #E30613, transparent);
+            box-shadow: 0 0 10px #E30613;
+        }
+        @keyframes glowSweep {
+            from { text-shadow: 0 0 10px rgba(227, 6, 19, 0.5); }
+            to { text-shadow: 0 0 25px rgba(227, 6, 19, 1); }
+        }
+        </style>
+        <div class="intro-title">CALCULADORA DE APUESTAS</div>
+        <div class="intro-line"></div>
+    </div>
+    """, unsafe_allow_html=True)
+    time.sleep(1.8)
+    st.session_state.intro_seen = True
+    st.rerun()
 
-# Sidebar Navigation Menu
-st.sidebar.markdown('<div style="font-size: 20px; font-weight: bold; color: #E30613; margin-top: 10px; margin-bottom: 5px;">Menú</div>', unsafe_allow_html=True)
-section = st.sidebar.radio(
-    "Selecciona un apartado",
-    [
-        "Calculadora",
-        "Favoritas",
-        "Top cuotas",
-        "Cartera",
-        "Estadísticas del modelo",
-        "Asistente manual",
-    ],
-    label_visibility="collapsed"
+# 2. Calculate global metrics for the header
+portfolio = st.session_state.get("portfolio", [])
+metrics_glob = calculate_balance_metrics(portfolio)
+
+# 3. Main Title & Profile block layout
+col_title, col_user = st.columns([3, 1.2])
+with col_title:
+    st.markdown('<div class="big-title">CALCULADORA DE APUESTAS</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Plataforma profesional de análisis de cuotas y gestión de cartera</div>', unsafe_allow_html=True)
+
+with col_user:
+    bal_val = metrics_glob["saldo_total"]
+    if bal_val > 0:
+        bal_color = "#00C853"
+        bal_sign = "+"
+    elif bal_val < 0:
+        bal_color = "#FF3B3B"
+        bal_sign = ""
+    else:
+        bal_color = "#ffffff"
+        bal_sign = ""
+    st.markdown(f"""
+    <div class="top-user-box">
+        <div style="font-size: 13px; color: #a0aec0; font-weight: bold;">Usuario: <span style="color: #ffffff;">Usuario</span></div>
+        <div style="font-size: 16px; font-weight: 800; color: {bal_color}; margin-top: 3px;">
+            Saldo: {bal_sign}{bal_val:.2f} €
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    c_btn1, c_btn2 = st.columns([1, 2.2])
+    with c_btn2:
+        if st.button("Ver evolución", key="top_ver_evolucion_btn"):
+            st.session_state.current_section = "Evolución del saldo"
+            st.rerun()
+
+# 4. Left Sidebar Navigation Menu
+SECTIONS = [
+    "Inicio",
+    "Calculadora",
+    "Favoritas",
+    "Top cuotas",
+    "Cartera",
+    "Estadísticas del modelo",
+    "Asistente manual",
+    "Historial de partidos estudiados",
+    "Evolución del saldo"
+]
+
+if "current_section" not in st.session_state:
+    st.session_state.current_section = "Inicio"
+
+try:
+    sec_index = SECTIONS.index(st.session_state.current_section)
+except ValueError:
+    sec_index = 0
+
+st.sidebar.markdown("""
+<div style="display: flex; align-items: center; margin-bottom: 20px; margin-top: 10px;">
+    <div style="margin-right: 12px; display: flex; flex-direction: column; justify-content: space-between; width: 18px; height: 12px;">
+        <div style="width: 100%; height: 2px; background-color: #E30613;"></div>
+        <div style="width: 100%; height: 2px; background-color: #E30613;"></div>
+        <div style="width: 100%; height: 2px; background-color: #E30613;"></div>
+    </div>
+    <div style="font-size: 18px; font-weight: bold; color: #ffffff; text-transform: uppercase; letter-spacing: 1px;">Menú</div>
+</div>
+""", unsafe_allow_html=True)
+
+selected_sidebar_sec = st.sidebar.radio(
+    "Menú de navegación",
+    SECTIONS,
+    index=sec_index,
+    label_visibility="collapsed",
+    key="nav_sidebar_radio"
 )
+
+if selected_sidebar_sec != st.session_state.current_section:
+    st.session_state.current_section = selected_sidebar_sec
+    st.rerun()
+
+section = st.session_state.current_section
 
 def clean_match_name(text):
     if not text:
@@ -416,9 +897,67 @@ def clean_match_name(text):
     return " ".join(text.split())
 
 # ----------------------------------------------------
+# SECCIÓN: INICIO
+# ----------------------------------------------------
+if section == "Inicio":
+    st.subheader("Panel de control")
+    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+    with col_h1:
+        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        if st.button("Calculadora", key="h_btn_calc"):
+            st.session_state.current_section = "Calculadora"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
+        if st.button("Favoritas", key="h_btn_fav"):
+            st.session_state.current_section = "Favoritas"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_h2:
+        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        if st.button("Top cuotas", key="h_btn_top"):
+            st.session_state.current_section = "Top cuotas"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
+        if st.button("Cartera", key="h_btn_cart"):
+            st.session_state.current_section = "Cartera"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_h3:
+        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        if st.button("Estadísticas del modelo", key="h_btn_est"):
+            st.session_state.current_section = "Estadísticas del modelo"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
+        if st.button("Asistente manual", key="h_btn_asis"):
+            st.session_state.current_section = "Asistente manual"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col_h4:
+        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        if st.button("Historial de partidos", key="h_btn_hist"):
+            st.session_state.current_section = "Historial de partidos estudiados"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
+        if st.button("Evolución del saldo", key="h_btn_evol"):
+            st.session_state.current_section = "Evolución del saldo"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ----------------------------------------------------
 # SECCIÓN: CALCULADORA
 # ----------------------------------------------------
-if section == "Calculadora":
+elif section == "Calculadora":
     st.header("Calculadora")
     if "config_match" not in st.session_state:
         st.session_state.config_match = ""
@@ -614,6 +1153,16 @@ Please be conservative with:
         st.session_state.config_competition = prompt_competition
         st.session_state.config_phase = prompt_phase
         st.session_state.config_betting_house = prompt_house
+        
+        # Save studied match history entry
+        save_or_update_studied_match(
+            match=cleaned_match,
+            competition=prompt_competition,
+            phase=prompt_phase,
+            betting_house=prompt_house,
+            presets=prompt_presets,
+            custom_markets=st.session_state.get("prompt_markets_custom_input", "")
+        )
 
     st.text_area(
         "Prompt de análisis de IA generado",
@@ -966,6 +1515,18 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 "selected_strategies": selected_strategies
             }
 
+            # Save studied match history entry with CSV and recommendations
+            save_or_update_studied_match(
+                match=match,
+                competition=competition,
+                phase=phase,
+                betting_house=betting_house,
+                presets=st.session_state.get("prompt_market_presets", ["Análisis completo"]),
+                custom_markets=st.session_state.get("prompt_markets_custom_input", ""),
+                csv_data=csv_input,
+                recommendations=selected_recommendations
+            )
+
             # Save latest markets for Top cuotas
             st.session_state.latest_markets = []
             for _, row in df_input.iterrows():
@@ -1094,7 +1655,8 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                                 "potential_profit": float(pot_profit),
                                 "status": "Favorita",
                                 "combined_bet": rec["combined_bet"],
-                                "legs": rec["legs"]
+                                "legs": rec["legs"],
+                                "sport": "Fútbol"
                             }
                             st.session_state.favorites.append(new_fav)
                             save_favorites()
@@ -1229,7 +1791,8 @@ elif section == "Favoritas":
                         "status": "Pendiente",
                         "profit": 0.0,
                         "combined_bet": fav.get("combined_bet", False),
-                        "legs": fav.get("legs", [])
+                        "legs": fav.get("legs", []),
+                        "sport": fav.get("sport", "Fútbol")
                     }
                     if "portfolio" not in st.session_state:
                         st.session_state.portfolio = []
@@ -1278,173 +1841,315 @@ elif section == "Top cuotas":
 # SECCIÓN: CARTERA
 # ----------------------------------------------------
 elif section == "Cartera":
-    st.header("Cartera log")
+    st.markdown('<div class="big-title">CARTERA</div>', unsafe_allow_html=True)
     
     if "portfolio" not in st.session_state:
         st.session_state.portfolio = []
         
-    col_left, col_right = st.columns([2, 1])
+    portfolio = st.session_state.portfolio
     
-    with col_left:
-        st.subheader("Historial de apuestas realizadas")
-        if not st.session_state.portfolio:
-            st.info("No tienes apuestas en tu cartera. Para añadir una apuesta, ve a la pestaña de 'Favoritas' y haz clic en 'Marcar como realizada'.")
+    # 1. Global Summary (unfiltered)
+    metrics_glob = calculate_balance_metrics(portfolio)
+    
+    col_g1, col_g2, col_g3 = st.columns(3)
+    with col_g1:
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">DINERO INVERTIDO</div>
+            <div class="metric-value">{metrics_glob["dinero_invertido"]:.2f} €</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_g2:
+        prof_color = "#00C853" if metrics_glob["beneficio_obtenido"] >= 0 else "#FF3B3B"
+        prof_sign = "+" if metrics_glob["beneficio_obtenido"] > 0 else ""
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">BENEFICIO OBTENIDO</div>
+            <div class="metric-value" style="color: {prof_color};">{prof_sign}{metrics_glob["beneficio_obtenido"]:.2f} €</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_g3:
+        roi_color = "#00C853" if metrics_glob["roi_cerrado"] >= 0 else "#FF3B3B"
+        roi_sign = "+" if metrics_glob["roi_cerrado"] > 0 else ""
+        st.markdown(f"""
+        <div class="metric-box">
+            <div class="metric-label">ROI CERRADO</div>
+            <div class="metric-value" style="color: {roi_color};">{roi_sign}{metrics_glob["roi_cerrado"]:.2f}%</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    col_g4, col_g5, col_g6, col_g7, col_g8, col_g9 = st.columns(6)
+    with col_g4:
+        st.markdown(f'<div class="mini-metric-box"><b>Saldo total:</b><br>{metrics_glob["saldo_total"]:.2f} €</div>', unsafe_allow_html=True)
+    with col_g5:
+        st.markdown(f'<div class="mini-metric-box"><b>Pendientes:</b><br>{metrics_glob["apuestas_pendientes"]}</div>', unsafe_allow_html=True)
+    with col_g6:
+        st.markdown(f'<div class="mini-metric-box"><b>Cerradas:</b><br>{metrics_glob["apuestas_cerradas"]}</div>', unsafe_allow_html=True)
+    with col_g7:
+        st.markdown(f'<div class="mini-metric-box"><b>Ganadas:</b><br><span style="color:#00C853">{metrics_glob["apuestas_ganadas"]}</span></div>', unsafe_allow_html=True)
+    with col_g8:
+        st.markdown(f'<div class="mini-metric-box"><b>Perdidas:</b><br><span style="color:#FF3B3B">{metrics_glob["apuestas_perdidas"]}</span></div>', unsafe_allow_html=True)
+    with col_g9:
+        st.markdown(f'<div class="mini-metric-box"><b>Nulas:</b><br>{metrics_glob["apuestas_nulas"]}</div>', unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # 2. Smart Best Bet Types Insights
+    st.subheader("Análisis inteligente de tipos de apuesta")
+    bet_types = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Combinada", "Otro"]
+    stats_by_type = {t: {
+        "total_bets": 0,
+        "closed_bets": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_rate": 0.0,
+        "ROI": 0.0,
+        "net_profit": 0.0,
+        "total_stake": 0.0,
+        "total_odds": 0.0,
+        "average_odds": 0.0
+    } for t in bet_types}
+
+    for bet in portfolio:
+        market = bet.get("market", "")
+        is_combined = bet.get("combined_bet", False)
+        b_type = classify_bet_type(market, is_combined)
+        
+        status = bet.get("status", "Pendiente")
+        stake = float(bet.get("stake", 0.0))
+        odds = float(bet.get("odds", 0.0))
+        profit = float(bet.get("profit", 0.0))
+        
+        stats_by_type[b_type]["total_bets"] += 1
+        stats_by_type[b_type]["total_odds"] += odds
+        
+        if status in ["Ganada", "Perdida", "Nula"]:
+            stats_by_type[b_type]["closed_bets"] += 1
+            stats_by_type[b_type]["total_stake"] += stake
+            stats_by_type[b_type]["net_profit"] += profit
+            if status == "Ganada":
+                stats_by_type[b_type]["wins"] += 1
+            elif status == "Perdida":
+                stats_by_type[b_type]["losses"] += 1
+
+    valid_types = []
+    for t in bet_types:
+        data = stats_by_type[t]
+        if data["total_bets"] > 0:
+            data["average_odds"] = data["total_odds"] / data["total_bets"]
         else:
-            placed_bets = sorted(st.session_state.portfolio, key=lambda x: x.get("date_placed", ""), reverse=True)
+            data["average_odds"] = 0.0
             
-            for idx, bet in enumerate(placed_bets):
-                bet_id = bet.get("id", f"bet_{idx}")
-                m_trans = translate_market_to_spanish(bet["market"])
-                
-                legs_html = ""
-                if bet.get("combined_bet"):
-                    legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in bet.get("legs", [])]
-                    legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
-                else:
-                    legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
-                
-                status_curr = bet.get("status", "Pendiente")
-                if status_curr == "Ganada":
-                    profit_color = "#00C853"
-                    profit_prefix = "+"
-                elif status_curr == "Perdida":
-                    profit_color = "#FF3B3B"
-                    profit_prefix = ""
-                else:
-                    profit_color = "#a0aec0"
-                    profit_prefix = ""
-                
-                st.markdown(f"""
-                <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
-                        <span>Realizada: {bet.get('date_placed', '')}</span>
-                        <span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
-                    </div>
-                    <div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{bet.get('match', '')}</div>
-                    <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{bet.get('competition', '')}</div>
-                    {legs_html}
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
-                        <div>Cuota: <span style="color: #ffffff;">{bet['odds']:.2f}</span></div>
-                        <div>Importe apostado: <span style="color: #ffffff;">{bet['stake']:.2f} €</span></div>
-                        <div>Retorno potencial: <span style="color: #ffffff;">{(bet['stake'] * bet['odds']):.2f} €</span></div>
-                        <div>Resultado: <span style="color: {profit_color}; font-weight: bold;">{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>
-                    </div>
+        if data["closed_bets"] > 0:
+            data["win_rate"] = data["wins"] / data["closed_bets"]
+            data["ROI"] = data["net_profit"] / data["total_stake"]
+        else:
+            data["win_rate"] = 0.0
+            data["ROI"] = 0.0
+            
+        if data["closed_bets"] >= 3:
+            data["weighted_accuracy"] = data["win_rate"] * min(data["closed_bets"] / 10.0, 1.0)
+            data["weighted_profitability"] = data["ROI"] * min(data["closed_bets"] / 10.0, 1.0)
+            valid_types.append((t, data))
+
+    if len(valid_types) < 1:
+        st.info("Todavía no hay suficientes datos para detectar tus mejores tipos de apuesta. Se requieren al menos 3 apuestas cerradas por tipo.")
+    else:
+        best_acc = sorted(valid_types, key=lambda x: (-x[1]["weighted_accuracy"], -x[1]["closed_bets"], -x[1]["ROI"]))[0]
+        best_prof = sorted(valid_types, key=lambda x: (-x[1]["weighted_profitability"], -x[1]["net_profit"], -x[1]["closed_bets"]))[0]
+        
+        col_i1, col_i2 = st.columns(2)
+        with col_i1:
+            st.markdown(f"""
+            <div class="insight-card">
+                <div class="insight-header">TIPO DE APUESTA CON MAYOR ACIERTO</div>
+                <div class="insight-title">{best_acc[0]}</div>
+                <div class="insight-metric-grid">
+                    <div><b>Apuestas:</b> {best_acc[1]["total_bets"]}</div>
+                    <div><b>Cerradas:</b> {best_acc[1]["closed_bets"]}</div>
+                    <div><b>Tasa acierto:</b> {best_acc[1]["win_rate"]*100:.1f}%</div>
+                    <div><b>ROI:</b> {best_acc[1]["ROI"]*100:+.1f}%</div>
+                    <div><b>Beneficio neto:</b> <span style="color:{'#00C853' if best_acc[1]['net_profit'] >= 0 else '#FF3B3B'}">{best_acc[1]["net_profit"]:+.2f} €</span></div>
+                    <div><b>Cuota media:</b> {best_acc[1]["average_odds"]:.2f}</div>
                 </div>
-                """, unsafe_allow_html=True)
+            </div>
+            """, unsafe_allow_html=True)
+            
+        with col_i2:
+            st.markdown(f"""
+            <div class="insight-card">
+                <div class="insight-header">TIPO DE APUESTA MÁS RENTABLE</div>
+                <div class="insight-title">{best_prof[0]}</div>
+                <div class="insight-metric-grid">
+                    <div><b>Apuestas:</b> {best_prof[1]["total_bets"]}</div>
+                    <div><b>Cerradas:</b> {best_prof[1]["closed_bets"]}</div>
+                    <div><b>Tasa acierto:</b> {best_prof[1]["win_rate"]*100:.1f}%</div>
+                    <div><b>ROI:</b> {best_prof[1]["ROI"]*100:+.1f}%</div>
+                    <div><b>Beneficio neto:</b> <span style="color:{'#00C853' if best_prof[1]['net_profit'] >= 0 else '#FF3B3B'}">{best_prof[1]["net_profit"]:+.2f} €</span></div>
+                    <div><b>Cuota media:</b> {best_prof[1]["average_odds"]:.2f}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # 3. Filtered Analysis Area
+    st.subheader("Análisis filtrado")
+    
+    all_dates = []
+    for b in portfolio:
+        dp = b.get("date_placed", "")
+        if dp and len(dp) >= 10:
+            try:
+                all_dates.append(datetime.datetime.strptime(dp[:10], "%Y-%m-%d").date())
+            except Exception:
+                pass
                 
-                ctrl_col1, ctrl_col2 = st.columns([3, 1])
-                with ctrl_col1:
-                    status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
-                    try:
-                        status_idx = status_options.index(status_curr)
-                    except ValueError:
-                        status_idx = 0
+    default_start = datetime.date.today() - datetime.timedelta(days=30)
+    default_end = datetime.date.today()
+    min_date = min(all_dates) if all_dates else default_start
+    max_date = max(all_dates) if all_dates else default_end
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    with col_f1:
+        fecha_inicio = st.date_input("Fecha inicial", value=min_date, key="cart_fecha_inicio")
+    with col_f2:
+        fecha_fin = st.date_input("Fecha final", value=max_date, key="cart_fecha_fin")
+        
+    all_competitions = sorted(list(set(b.get("competition", "") for b in portfolio if b.get("competition"))))
+    competition_options = ["Todos"] + all_competitions
+    with col_f3:
+        torneo_filtro = st.selectbox("Torneo / competición", options=competition_options, key="cart_torneo_filtro")
+        
+    # Apply filtering
+    filtered_bets = []
+    for b in portfolio:
+        dp = b.get("date_placed", "")
+        bet_date = None
+        if dp and len(dp) >= 10:
+            try:
+                bet_date = datetime.datetime.strptime(dp[:10], "%Y-%m-%d").date()
+            except Exception:
+                pass
+        if bet_date:
+            if not (fecha_inicio <= bet_date <= fecha_fin):
+                continue
+        comp = b.get("competition", "")
+        if torneo_filtro != "Todos":
+            if comp != torneo_filtro:
+                continue
+        filtered_bets.append(b)
+        
+    metrics_filt = calculate_balance_metrics(filtered_bets)
+    
+    col_rf1, col_rf2, col_rf3, col_rf4 = st.columns(4)
+    with col_rf1:
+        st.markdown(f'<div class="mini-metric-box"><b>Invertido filtrado:</b><br>{metrics_filt["dinero_invertido"]:.2f} €</div>', unsafe_allow_html=True)
+    with col_rf2:
+        f_prof_color = "#00C853" if metrics_filt["beneficio_obtenido"] >= 0 else "#FF3B3B"
+        f_prof_sign = "+" if metrics_filt["beneficio_obtenido"] > 0 else ""
+        st.markdown(f'<div class="mini-metric-box"><b>Beneficio filtrado:</b><br><span style="color:{f_prof_color}">{f_prof_sign}{metrics_filt["beneficio_obtenido"]:.2f} €</span></div>', unsafe_allow_html=True)
+    with col_rf3:
+        st.markdown(f'<div class="mini-metric-box"><b>Apuestas filtradas:</b><br>{len(filtered_bets)} (Cerradas: {metrics_filt["apuestas_cerradas"]})</div>', unsafe_allow_html=True)
+    with col_rf4:
+        f_roi_color = "#00C853" if metrics_filt["roi_cerrado"] >= 0 else "#FF3B3B"
+        f_roi_sign = "+" if metrics_filt["roi_cerrado"] > 0 else ""
+        st.markdown(f'<div class="mini-metric-box"><b>ROI filtrado:</b><br><span style="color:{f_roi_color}">{f_roi_sign}{metrics_filt["roi_cerrado"]:.2f}%</span></div>', unsafe_allow_html=True)
+        
+    st.markdown("#### Evolución de saldo filtrado")
+    df_filt_chart = prepare_chart_data(filtered_bets)
+    if not df_filt_chart.empty:
+        render_altair_chart(df_filt_chart)
+    else:
+        st.info("No hay datos suficientes para mostrar el gráfico de evolución filtrado.")
+
+    st.markdown("---")
+
+    # 4. List of Placed Bets (Realizadas)
+    st.subheader("Historial de apuestas en cartera")
+    if not portfolio:
+        st.info("No tienes apuestas en tu cartera. Para añadir una apuesta, ve a la pestaña de 'Favoritas' y haz clic en 'Marcar como realizada'.")
+    else:
+        placed_bets = sorted(portfolio, key=lambda x: x.get("date_placed", ""), reverse=True)
+        for idx, bet in enumerate(placed_bets):
+            bet_id = bet.get("id", f"bet_{idx}")
+            m_trans = translate_market_to_spanish(bet["market"])
+            
+            legs_html = ""
+            if bet.get("combined_bet"):
+                legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in bet.get("legs", [])]
+                legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+            else:
+                legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
+                
+            status_curr = bet.get("status", "Pendiente")
+            if status_curr == "Ganada":
+                profit_color = "#00C853"
+                profit_prefix = "+"
+            elif status_curr == "Perdida":
+                profit_color = "#FF3B3B"
+                profit_prefix = ""
+            else:
+                profit_color = "#a0aec0"
+                profit_prefix = ""
+                
+            st.markdown(f"""
+            <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
+                    <span>Realizada: {bet.get('date_placed', '')}</span>
+                    <span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
+                </div>
+                <div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{bet.get('match', '')}</div>
+                <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{bet.get('competition', '')}</div>
+                {legs_html}
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
+                    <div>Cuota: <span style="color: #ffffff;">{bet['odds']:.2f}</span></div>
+                    <div>Importe apostado: <span style="color: #ffffff;">{bet['stake']:.2f} €</span></div>
+                    <div>Retorno potencial: <span style="color: #ffffff;">{(bet['stake'] * bet['odds']):.2f} €</span></div>
+                    <div>Resultado: <span style="color: {profit_color}; font-weight: bold;">{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            ctrl_col1, ctrl_col2 = st.columns([3, 1])
+            with ctrl_col1:
+                status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
+                try:
+                    status_idx = status_options.index(status_curr)
+                except ValueError:
+                    status_idx = 0
                     
-                    new_status = st.selectbox(
-                        "Estado de la apuesta",
-                        status_options,
-                        index=status_idx,
-                        key=f"status_select_{bet_id}_{idx}",
-                        label_visibility="collapsed"
-                    )
+                new_status = st.selectbox(
+                    "Estado de la apuesta",
+                    status_options,
+                    index=status_idx,
+                    key=f"cart_status_select_{bet_id}_{idx}",
+                    label_visibility="collapsed"
+                )
+                
+                if new_status != status_curr:
+                    for b in st.session_state.portfolio:
+                        if b.get("id") == bet_id:
+                            b["status"] = new_status
+                            if new_status == "Ganada":
+                                b["profit"] = b["stake"] * (b["odds"] - 1.0)
+                            elif new_status == "Perdida":
+                                b["profit"] = -b["stake"]
+                            else:
+                                b["profit"] = 0.0
+                            break
+                    save_portfolio()
+                    st.rerun()
                     
-                    if new_status != status_curr:
-                        for b in st.session_state.portfolio:
-                            if b.get("id") == bet_id:
-                                b["status"] = new_status
-                                if new_status == "Ganada":
-                                    b["profit"] = b["stake"] * (b["odds"] - 1.0)
-                                elif new_status == "Perdida":
-                                    b["profit"] = -b["stake"]
-                                else:
-                                    b["profit"] = 0.0
-                                break
-                        save_portfolio()
-                        st.rerun()
-                        
-                with ctrl_col2:
-                    if st.button("Eliminar", key=f"delete_port_{bet_id}_{idx}"):
-                        for b in st.session_state.portfolio:
-                            if b.get("id") == bet_id:
-                                st.session_state.portfolio.remove(b)
-                                break
-                        save_portfolio()
-                        st.rerun()
-                        
-    with col_right:
-        st.subheader("Resumen de rendimiento")
-        
-        total_bets = len(st.session_state.portfolio)
-        pending_bets = sum(1 for b in st.session_state.portfolio if b.get("status") == "Pendiente")
-        closed_bets = sum(1 for b in st.session_state.portfolio if b.get("status") in ["Ganada", "Perdida", "Nula"])
-        won_bets = sum(1 for b in st.session_state.portfolio if b.get("status") == "Ganada")
-        lost_bets = sum(1 for b in st.session_state.portfolio if b.get("status") == "Perdida")
-        
-        saldo_total = sum(b.get("profit", 0.0) for b in st.session_state.portfolio)
-        
-        total_closed_stake = sum(b.get("stake", 0.0) for b in st.session_state.portfolio if b.get("status") in ["Ganada", "Perdida", "Nula"])
-        total_closed_profit = sum(b.get("profit", 0.0) for b in st.session_state.portfolio if b.get("status") in ["Ganada", "Perdida", "Nula"])
-        
-        if total_closed_stake > 0:
-            roi_cerrado = (total_closed_profit / total_closed_stake) * 100.0
-        else:
-            roi_cerrado = 0.0
-            
-        if saldo_total > 0:
-            saldo_color = "#00C853"
-            saldo_sign = "+"
-        elif saldo_total < 0:
-            saldo_color = "#FF3B3B"
-            saldo_sign = ""
-        else:
-            saldo_color = "#ffffff"
-            saldo_sign = ""
-            
-        st.markdown(f"""
-        <div style="background-color: #12161a; padding: 25px; border-radius: 12px; border: 2px solid #262c35; text-align: center; margin-bottom: 20px;">
-            <div style="font-size: 14px; font-weight: bold; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px;">SALDO TOTAL</div>
-            <div style="font-size: 38px; font-weight: 800; color: {saldo_color}; margin-top: 10px;">{saldo_sign}{saldo_total:.2f} €</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
-                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Total Apuestas</div>
-                <div style="font-size: 20px; font-weight: bold; color: #ffffff; margin-top: 2px;">{total_bets}</div>
-            </div>
-            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
-                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Pendientes</div>
-                <div style="font-size: 20px; font-weight: bold; color: #ffd400; margin-top: 2px;">{pending_bets}</div>
-            </div>
-            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
-                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Ganadas</div>
-                <div style="font-size: 20px; font-weight: bold; color: #00C853; margin-top: 2px;">{won_bets}</div>
-            </div>
-            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
-                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Perdidas</div>
-                <div style="font-size: 20px; font-weight: bold; color: #ff3b30; margin-top: 2px;">{lost_bets}</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if roi_cerrado > 0:
-            roi_color = "#00C853"
-            roi_sign = "+"
-        elif roi_cerrado < 0:
-            roi_color = "#FF3B3B"
-            roi_sign = ""
-        else:
-            roi_color = "#ffffff"
-            roi_sign = ""
-            
-        st.markdown(f"""
-        <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
-            <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.5px;">ROI Cerrado</div>
-            <div style="font-size: 24px; font-weight: bold; color: {roi_color}; margin-top: 5px;">{roi_sign}{roi_cerrado:.2f}%</div>
-            <div style="font-size: 11px; color: #718096; margin-top: 5px;">Basado en {closed_bets} apuestas finalizadas (Inversión: {total_closed_stake:.2f} €)</div>
-        </div>
-        """, unsafe_allow_html=True)
+            with ctrl_col2:
+                if st.button("Eliminar", key=f"cart_delete_port_{bet_id}_{idx}"):
+                    for b in st.session_state.portfolio:
+                        if b.get("id") == bet_id:
+                            st.session_state.portfolio.remove(b)
+                            break
+                    save_portfolio()
+                    st.rerun()
 
 # ----------------------------------------------------
 # SECCIÓN: ESTADÍSTICAS DEL MODELO
@@ -1626,12 +2331,20 @@ elif section == "Estadísticas del modelo":
                 })
             st.dataframe(pd.DataFrame(type_rows), use_container_width=True, hide_index=True)
 
-# ----------------------------------------------------
-# SECCIÓN: ASISTENTE MANUAL
-# ----------------------------------------------------
 elif section == "Asistente manual":
-    st.header("Asistente manual")
-    st.markdown("Esta sección mantiene la app gratuita. La app no usa APIs ni scraping. Aquí puedes generar prompts listos para copiar, enviarlos a ChatGPT, Gemini u otro asistente, y pegar después el CSV devuelto en la calculadora o en la cartera.")
+    st.markdown('<div class="big-title">ASISTENTE MANUAL</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="background-color: #12161a; padding: 20px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; font-size: 14px; color: #ffffff;">
+        El Asistente manual prepara automáticamente los textos que necesitas para analizar partidos o actualizar resultados. La aplicación genera el prompt exacto, tú lo envías a tu asistente de IA y después pegas el CSV recibido para actualizar la calculadora, la cartera y las estadísticas.
+        <br><br>
+        <b>Pasos a seguir:</b>
+        <ol style="margin-left: 20px; margin-top: 5px;">
+            <li>Genera el prompt del partido.</li>
+            <li>Envía el prompt a tu asistente de IA.</li>
+            <li>Pega el CSV devuelto en la aplicación.</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.subheader("Generar prompt de análisis del partido")
     
@@ -1669,7 +2382,7 @@ elif section == "Asistente manual":
                 "UEFA Champions League", "UEFA Europa League", "UEFA Conference League",
                 "Premier League", "LaLiga", "Serie A", "Bundesliga", "Ligue 1", "Otro"
             ].index(st.session_state.get("prompt_comp_select")),
-            key="am_comp_select"
+            key="am_comp_select_widget"
         )
         if am_comp_select == "Otro":
             am_competition = st.text_input(
@@ -1710,7 +2423,7 @@ elif section == "Asistente manual":
                 "Winamax", "Bet365", "Codere", "Betfair", "Bwin", "Marathonbet",
                 "1xBet", "Betway", "William Hill", "Pinnacle", "Otro"
             ].index(st.session_state.get("prompt_house_select")),
-            key="am_house_select"
+            key="am_house_select_widget"
         )
         if am_house_select == "Otro":
             am_house = st.text_input(
@@ -1721,7 +2434,6 @@ elif section == "Asistente manual":
             )
         else:
             am_house = am_house_select
-
         am_presets = st.multiselect(
             "Tipo de análisis de mercados",
             [
@@ -1738,13 +2450,12 @@ elif section == "Asistente manual":
             default=st.session_state.get("prompt_market_presets", ["Análisis completo"]),
             key="am_market_presets"
         )
-
+        
     if "am_generated_analysis_prompt" not in st.session_state:
         st.session_state.am_generated_analysis_prompt = ""
         
     if st.button("GENERAR PROMPT DE ANÁLISIS", key="am_generate_analysis_btn", use_container_width=True):
         cleaned_match = clean_match_name(am_match)
-        
         phase_mapping = {
             "Fase de grupos": "Group",
             "Eliminatoria": "Knockout",
@@ -1752,7 +2463,6 @@ elif section == "Asistente manual":
             "Final": "Final"
         }
         am_phase_eng = phase_mapping.get(am_phase, am_phase)
-        
         preset_mapping = {
             "Análisis completo": "1X2, double chance, draw no bet, goals, under/over 2.5, under/over 3.5, both teams to score, team goals, corners, team corners, cards, team cards, shots, shots on target, handicaps, Asian handicaps",
             "Apuestas conservadoras / seguras": "double chance, draw no bet, under/over 3.5 goals, team under/over goals, team corners, team cards, low-risk handicap lines",
@@ -1763,7 +2473,6 @@ elif section == "Asistente manual":
             "Tiros": "total shots, team shots, shots on target, player shots if lineups are available, player shots on target if lineups are available",
             "Hándicaps": "European handicaps, Asian handicaps, favorite handicap, underdog positive handicap, low-risk handicap lines"
         }
-        
         markets_list = []
         for pr in am_presets:
             if pr in preset_mapping:
@@ -1771,7 +2480,6 @@ elif section == "Asistente manual":
                     item_clean = item.strip()
                     if item_clean and item_clean not in markets_list:
                         markets_list.append(item_clean)
-        
         if "Personalizado" in am_presets:
             custom_markets = st.session_state.get("prompt_markets_custom_input", "")
             if custom_markets:
@@ -1779,9 +2487,7 @@ elif section == "Asistente manual":
                     item_clean = item.strip()
                     if item_clean and item_clean not in markets_list:
                         markets_list.append(item_clean)
-                        
         am_markets = ", ".join(markets_list)
-        
         prompt_text = f"""Please search current information about the football match "{cleaned_match}" in the "{am_competition}" ({am_phase_eng} phase).
 Review odds, lineups, injuries, suspensions, recent form, FIFA ranking or Elo, tactical context, referee if available, corners, cards, goals and shots. Use "{am_house}" as the betting house preference if possible.
 
@@ -1814,6 +2520,14 @@ Please be conservative with:
 - under bets based only on defensive style,
 - cards totals without referee information."""
         st.session_state.am_generated_analysis_prompt = prompt_text
+        save_or_update_studied_match(
+            match=cleaned_match,
+            competition=am_competition,
+            phase=am_phase,
+            betting_house=am_house,
+            presets=am_presets,
+            custom_markets=st.session_state.get("prompt_markets_custom_input", "")
+        )
         
     st.text_area(
         "Prompt de análisis de IA",
@@ -1821,7 +2535,6 @@ Please be conservative with:
         height=250,
         key="am_analysis_prompt_area"
     )
-    
     escaped_analysis_prompt = json.dumps(st.session_state.am_generated_analysis_prompt)
     copy_analysis_html = f"""
     <style>
@@ -1862,13 +2575,11 @@ Please be conservative with:
     </script>
     """
     st.components.v1.html(copy_analysis_html, height=75)
-
+    
     st.markdown("---")
     st.subheader("Generar prompt para actualizar resultados pendientes")
-    
     if "am_generated_results_prompt" not in st.session_state:
         st.session_state.am_generated_results_prompt = ""
-        
     if st.button("GENERAR PROMPT DE RESULTADOS PENDIENTES", key="am_generate_results_btn", use_container_width=True):
         pending_bets = [b for b in st.session_state.get("portfolio", []) if b.get("status") == "Pendiente"]
         if not pending_bets:
@@ -1879,7 +2590,6 @@ Please be conservative with:
                 legs_str = ""
                 if b.get("combined_bet"):
                     legs_str = " (Combined legs: " + ", ".join([f"{leg['market']} (@{leg['odds']:.2f})" for leg in b.get("legs", [])]) + ")"
-                
                 bets_list_str.append(
                     f"- BetID: {b['id']}\n"
                     f"  Match: {b['match']}\n"
@@ -1890,9 +2600,7 @@ Please be conservative with:
                     f"  Stake: {b['stake']:.2f} EUR\n"
                     f"  Date saved: {b.get('date_placed', '')}"
                 )
-            
             bets_formatted = "\n\n".join(bets_list_str)
-            
             prompt_text = f"""Please verify the final results for the following football bets:
 
 {bets_formatted}
@@ -1918,7 +2626,6 @@ CSV rules:
         height=250,
         key="am_results_prompt_area"
     )
-    
     escaped_results_prompt = json.dumps(st.session_state.am_generated_results_prompt)
     copy_results_html = f"""
     <style>
@@ -1959,17 +2666,15 @@ CSV rules:
     </script>
     """
     st.components.v1.html(copy_results_html, height=75)
-
+    
     st.markdown("---")
     st.subheader("Actualizar cartera con CSV de resultados")
-    
     csv_results_input = st.text_area(
         "Pegar CSV de resultados",
         placeholder="BetID,Status,FinalScore,Reason\nport_123456789_fav_123,Ganada,Spain 3-0 Cape Verde,Bet landed\nport_987654321_fav_456,Perdida,Belgium 1-1 Egypt,Bet did not land",
         height=150,
         key="am_csv_results_input"
     )
-    
     if st.button("ACTUALIZAR CARTERA CON RESULTADOS", key="am_update_portfolio_btn", use_container_width=True):
         if not csv_results_input.strip():
             st.error("Por favor, pega el CSV de resultados antes de hacer clic en el botón.")
@@ -1977,10 +2682,8 @@ CSV rules:
             try:
                 df_results = pd.read_csv(StringIO(csv_results_input))
                 df_results.columns = [c.strip() for c in df_results.columns]
-                
                 required_cols = ["BetID", "Status", "FinalScore", "Reason"]
                 missing_cols = [col for col in required_cols if col not in df_results.columns]
-                
                 if missing_cols:
                     st.error(f"Error: Al CSV le faltan las columnas requeridas: {', '.join(missing_cols)}")
                 else:
@@ -1990,14 +2693,12 @@ CSV rules:
                         status = str(row["Status"]).strip()
                         final_score = str(row["FinalScore"]).strip()
                         reason = str(row["Reason"]).strip()
-                        
                         for b in st.session_state.portfolio:
                             if str(b.get("id")).strip() == bet_id:
                                 if status in ["Ganada", "Perdida", "Nula", "Pendiente"]:
                                     b["status"] = status
                                     b["final_score"] = final_score
                                     b["reason"] = reason
-                                    
                                     if status == "Ganada":
                                         b["profit"] = b["stake"] * (b["odds"] - 1.0)
                                     elif status == "Perdida":
@@ -2006,7 +2707,6 @@ CSV rules:
                                         b["profit"] = 0.0
                                     updated_count += 1
                                 break
-                                
                     if updated_count > 0:
                         save_portfolio()
                         st.success(f"Se han actualizado correctamente {updated_count} apuestas en la Cartera.")
@@ -2015,3 +2715,341 @@ CSV rules:
                         st.warning("No se encontró ninguna apuesta con los BetIDs proporcionados en la Cartera o el formato es incorrecto.")
             except Exception as e:
                 st.error(f"Error al procesar el CSV de resultados: {str(e)}")
+
+# ----------------------------------------------------
+# SECCIÓN: HISTORIAL DE PARTIDOS ESTUDIADOS
+# ----------------------------------------------------
+elif section == "Historial de partidos estudiados":
+    st.markdown('<div class="big-title">HISTORIAL DE PARTIDOS ESTUDIADOS</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="background-color: #12161a; padding: 12px; border-radius: 6px; border: 1px solid #ffd400; margin-bottom: 20px; font-size: 13px; color: #ffffff;">
+        <b>Nota de cuotas:</b> Las cuotas guardadas pertenecen al último análisis realizado. Para actualizar la información del partido, vuelve a generar el prompt y pega un nuevo CSV.
+    </div>
+    """, unsafe_allow_html=True)
+    load_studied_matches()
+    matches = st.session_state.studied_matches
+    if not matches:
+        st.info("Aún no has analizado ningún partido. Ve a la Calculadora y genera un prompt o calcula apuestas para registrarlos en el historial.")
+    else:
+        for idx, entry in enumerate(sorted(matches, key=lambda x: x.get("last_updated", ""), reverse=True)):
+            match_name = entry.get("match", "")
+            comp = entry.get("competition", "")
+            house = entry.get("betting_house", "")
+            last_up = entry.get("last_updated", "")
+            presets_used = ", ".join(entry.get("selected_market_presets", ["Análisis completo"]))
+            recs = entry.get("last_recommendations", [])
+            recs_text = ""
+            if recs:
+                recs_list = []
+                for r in recs[:2]:
+                    m_trans = translate_market_to_spanish(r.get("market", ""))
+                    recs_list.append(f"{m_trans} (@{r.get('odds', 0.0):.2f})")
+                recs_text = " — ".join(recs_list)
+            else:
+                recs_text = "Sin recomendaciones previas"
+                
+            st.markdown(f"""
+            <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #E30613; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
+                    <span>Último análisis: {last_up}</span>
+                    <span style="color: #E30613; font-weight: bold;">{house}</span>
+                </div>
+                <div style="font-size: 16px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{match_name}</div>
+                <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{comp} ({entry.get('phase', 'Fase de grupos')})</div>
+                <div style="font-size: 13px; color: #ffd400; margin-bottom: 8px;"><b>Presets de mercados:</b> {presets_used}</div>
+                <div style="font-size: 13px; color: #00C853;"><b>Últimas recomendaciones:</b> {recs_text}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col_b1, col_b2, col_b3, col_b4 = st.columns(4)
+            with col_b1:
+                if st.button("Cargar en calculadora", key=f"hist_load_{idx}"):
+                    st.session_state.prompt_match_input = match_name
+                    if comp in [
+                        "FIFA World Cup 2026", "UEFA Euro", "Copa América", "Africa Cup of Nations",
+                        "UEFA Champions League", "UEFA Europa League", "UEFA Conference League",
+                        "Premier League", "LaLiga", "Serie A", "Bundesliga", "Ligue 1"
+                    ]:
+                        st.session_state.prompt_comp_select = comp
+                    else:
+                        st.session_state.prompt_comp_select = "Otro"
+                        st.session_state.prompt_comp_custom = comp
+                    st.session_state.prompt_phase_input = entry.get("phase", "Fase de grupos")
+                    if house in [
+                        "Winamax", "Bet365", "Codere", "Betfair", "Bwin", "Marathonbet",
+                        "1xBet", "Betway", "William Hill", "Pinnacle"
+                    ]:
+                        st.session_state.prompt_house_select = house
+                    else:
+                        st.session_state.prompt_house_select = "Otro"
+                        st.session_state.prompt_house_custom = house
+                    st.session_state.prompt_market_presets = entry.get("selected_market_presets", ["Análisis completo"])
+                    st.session_state.prompt_markets_custom_input = entry.get("custom_markets", "")
+                    
+                    st.session_state.config_match = match_name
+                    st.session_state.config_competition = comp
+                    st.session_state.config_phase = entry.get("phase", "Fase de grupos")
+                    st.session_state.config_betting_house = house
+                    
+                    st.session_state.current_section = "Calculadora"
+                    st.success("¡Partido cargado en la calculadora!")
+                    st.rerun()
+            with col_b2:
+                if st.button("Volver a generar prompt", key=f"hist_prompt_{idx}"):
+                    cleaned_m = clean_match_name(match_name)
+                    presets = entry.get("selected_market_presets", ["Análisis completo"])
+                    custom_m = entry.get("custom_markets", "")
+                    phase = entry.get("phase", "Fase de grupos")
+                    phase_mapping = {
+                        "Fase de grupos": "Group",
+                        "Eliminatoria": "Knockout",
+                        "Semifinal": "Semifinal",
+                        "Final": "Final"
+                    }
+                    p_eng = phase_mapping.get(phase, phase)
+                    preset_mapping = {
+                        "Análisis completo": "1X2, double chance, draw no bet, goals, under/over 2.5, under/over 3.5, both teams to score, team goals, corners, team corners, cards, team cards, shots, shots on target, handicaps, Asian handicaps",
+                        "Apuestas conservadoras / seguras": "double chance, draw no bet, under/over 3.5 goals, team under/over goals, team corners, team cards, low-risk handicap lines",
+                        "Mercados principales de resultado": "1X2, double chance, draw no bet, halftime/fulltime, team to score first, win to nil",
+                        "Goles": "goals, under/over 1.5, under/over 2.5, under/over 3.5, both teams to score, team goals, clean sheet, win to nil",
+                        "Córners": "total corners, under/over corners, team corners, corner handicap, first half corners",
+                        "Tarjetas": "total cards, team cards, most cards, player cards if lineups are available, cards handicap",
+                        "Tiros": "total shots, team shots, shots on target, player shots if lineups are available, player shots on target if lineups are available",
+                        "Hándicaps": "European handicaps, Asian handicaps, favorite handicap, underdog positive handicap, low-risk handicap lines"
+                    }
+                    markets_list = []
+                    for pr in presets:
+                        if pr in preset_mapping:
+                            for item in preset_mapping[pr].split(","):
+                                item_clean = item.strip()
+                                if item_clean and item_clean not in markets_list:
+                                    markets_list.append(item_clean)
+                    if custom_m:
+                        for item in custom_m.split(","):
+                            item_clean = item.strip()
+                            if item_clean and item_clean not in markets_list:
+                                markets_list.append(item_clean)
+                    p_markets = ", ".join(markets_list)
+                    fresh_prompt = f"""Please search current information about the football match "{cleaned_m}" in the "{comp}" ({p_eng} phase).
+Use the most recent available odds and current match information. Do not reuse old odds.
+Review updated odds, lineups, injuries, suspensions, recent form, FIFA ranking or Elo, tactical context, referee if available, corners, cards, goals and shots. Use "{house}" as the betting house preference if possible.
+
+Based on your research and analysis, estimate probabilities for the following markets: {p_markets}
+
+You must return ONLY a CSV with exactly these columns:
+Market,Odds,Probability,Risk,Uncertainty,Type
+
+CSV rules:
+- Odds must be in decimal format.
+- Probability must be a number from 0 to 100.
+- Risk must be a number from 0 to 100.
+- Uncertainty must be a number from 0 to 100.
+- Type must be Low, Medium or High.
+- Do not include explanations outside the CSV.
+- Do not include markdown code fences.
+- Do not include markets without odds.
+- If data is missing, increase uncertainty.
+- Do not force bets.
+- Only include markets with realistic potential value.
+
+Here is the model formula for context:
+EV* = [(Estimated Probability − λ × Uncertainty − ρ × Risk) × Odds] − 1
+
+Please be conservative with:
+- finals,
+- knockout matches,
+- low odds favorites,
+- aggressive handicaps,
+- under bets based only on defensive style,
+- cards totals without referee information."""
+                    st.session_state.fresh_prompt_text = fresh_prompt
+                    st.session_state.fresh_prompt_match = match_name
+                    st.rerun()
+            with col_b3:
+                last_csv = entry.get("last_csv", "")
+                if last_csv:
+                    exp_csv = st.expander("Ver CSV guardado")
+                    with exp_csv:
+                        st.code(last_csv, language="csv")
+                else:
+                    st.button("Sin CSV guardado", key=f"hist_csv_none_{idx}", disabled=True)
+            with col_b4:
+                if st.button("Eliminar del historial", key=f"hist_delete_{idx}"):
+                    st.session_state.studied_matches.remove(entry)
+                    save_studied_matches()
+                    st.success("¡Partido eliminado del historial!")
+                    st.rerun()
+                    
+        if "fresh_prompt_text" in st.session_state and "fresh_prompt_match" in st.session_state:
+            st.markdown("---")
+            st.subheader(f"Prompt de análisis actualizado: {st.session_state.fresh_prompt_match}")
+            st.text_area("Prompt (copia y envía a tu asistente de IA)", value=st.session_state.fresh_prompt_text, height=250, key="fresh_prompt_area")
+            escaped_fresh_prompt = json.dumps(st.session_state.fresh_prompt_text)
+            copy_fresh_html = f"""
+            <style>
+            body {{ margin: 0; padding: 0; background-color: transparent; overflow: hidden; }}
+            button {{
+                background-color: #E30613; color: #ffffff; border: 2px solid #ff4d4d; border-radius: 8px;
+                font-weight: 700; padding: 0.6rem 2.5rem; transition: all 0.3s ease; width: 100%;
+                text-transform: uppercase; letter-spacing: 1px; font-family: sans-serif; cursor: pointer;
+            }}
+            button:hover {{ background-color: #ffffff !important; color: #E30613 !important; border-color: #ffffff !important; }}
+            </style>
+            <button id="copy-fresh-btn">COPIAR PROMPT ACTUALIZADO</button>
+            <div id="status-fresh" style="color: #00C853; font-weight: bold; font-family: sans-serif; margin-top: 8px; font-size: 14px; text-align: center; display: none;">Prompt copiado al portapapeles</div>
+            <script>
+            document.getElementById('copy-fresh-btn').addEventListener('click', function() {{
+                const text = {escaped_fresh_prompt};
+                navigator.clipboard.writeText(text).then(() => {{
+                    const status = document.getElementById('status-fresh');
+                    status.innerText = "Prompt copiado al portapapeles";
+                    status.style.color = "#00C853";
+                    status.style.display = "block";
+                    setTimeout(() => {{ status.style.display = "none"; }}, 3000);
+                }}).catch(() => {{
+                    const status = document.getElementById('status-fresh');
+                    status.innerText = "Fallo la copia. Por favor selecciona y copia manualmente.";
+                    status.style.color = "#FF3B3B";
+                    status.style.display = "block";
+                }});
+            }});
+            </script>
+            """
+            st.components.v1.html(copy_fresh_html, height=75)
+
+# ----------------------------------------------------
+# SECCIÓN: EVOLUCIÓN DEL SALDO
+# ----------------------------------------------------
+elif section == "Evolución del saldo":
+    st.markdown('<div class="big-title">EVOLUCIÓN DEL SALDO</div>', unsafe_allow_html=True)
+    portfolio = st.session_state.get("portfolio", [])
+    metrics_glob = calculate_balance_metrics(portfolio)
+    col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+    with col_e1:
+        e_saldo_color = "#00C853" if metrics_glob["saldo_total"] >= 0 else "#FF3B3B"
+        e_saldo_sign = "+" if metrics_glob["saldo_total"] > 0 else ""
+        st.markdown(f'<div class="mini-metric-box"><b>Saldo total:</b><br><span style="color:{e_saldo_color}; font-size:18px; font-weight:bold;">{e_saldo_sign}{metrics_glob["saldo_total"]:.2f} €</span></div>', unsafe_allow_html=True)
+    with col_e2:
+        st.markdown(f'<div class="mini-metric-box"><b>Beneficio total:</b><br><span style="color:{e_saldo_color}; font-size:18px; font-weight:bold;">{e_saldo_sign}{metrics_glob["beneficio_obtenido"]:.2f} €</span></div>', unsafe_allow_html=True)
+    with col_e3:
+        st.markdown(f'<div class="mini-metric-box"><b>Dinero invertido:</b><br><span style="font-size:18px; font-weight:bold;">{metrics_glob["dinero_invertido"]:.2f} €</span></div>', unsafe_allow_html=True)
+    with col_e4:
+        e_roi_color = "#00C853" if metrics_glob["roi_cerrado"] >= 0 else "#FF3B3B"
+        e_roi_sign = "+" if metrics_glob["roi_cerrado"] > 0 else ""
+        st.markdown(f'<div class="mini-metric-box"><b>ROI cerrado:</b><br><span style="color:{e_roi_color}; font-size:18px; font-weight:bold;">{e_roi_sign}{metrics_glob["roi_cerrado"]:.2f}%</span></div>', unsafe_allow_html=True)
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.subheader("Evolución temporal del saldo")
+    df_chart = prepare_chart_data(portfolio)
+    if not df_chart.empty:
+        render_altair_chart(df_chart)
+    else:
+        st.info("No hay datos de apuestas finalizadas en la Cartera para mostrar el gráfico de evolución.")
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+    exp1 = st.expander("Detalle por torneo")
+    with exp1:
+        comp_stats_evo = {}
+        for b in portfolio:
+            comp = b.get("competition") or "Otros"
+            status = b.get("status", "Pendiente")
+            stake = float(b.get("stake", 0.0))
+            profit = float(b.get("profit", 0.0))
+            if comp not in comp_stats_evo:
+                comp_stats_evo[comp] = {"total_bets": 0, "closed_bets": 0, "wins": 0, "stake": 0.0, "profit": 0.0}
+            comp_stats_evo[comp]["total_bets"] += 1
+            if status in ["Ganada", "Perdida", "Nula"]:
+                comp_stats_evo[comp]["closed_bets"] += 1
+                comp_stats_evo[comp]["stake"] += stake
+                comp_stats_evo[comp]["profit"] += profit
+                if status == "Ganada":
+                    comp_stats_evo[comp]["wins"] += 1
+        if comp_stats_evo:
+            comp_rows = []
+            for comp, cdata in comp_stats_evo.items():
+                c_roi = (cdata["profit"] / cdata["stake"] * 100.0) if cdata["stake"] > 0 else 0.0
+                c_acc = (cdata["wins"] / cdata["closed_bets"] * 100.0) if cdata["closed_bets"] > 0 else 0.0
+                comp_rows.append({
+                    "Competición": comp,
+                    "Apuestas": cdata["total_bets"],
+                    "Invertido": f"{cdata['stake']:.2f} €",
+                    "Beneficio": f"{cdata['profit']:+.2f} €",
+                    "ROI": f"{c_roi:+.1f}%",
+                    "Acierto": f"{c_acc:.1f}%"
+                })
+            st.dataframe(pd.DataFrame(comp_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay datos suficientes para mostrar el desglose por torneo.")
+            
+    exp2 = st.expander("Detalle por tipo de apuesta")
+    with exp2:
+        bet_types = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Combinada", "Otro"]
+        stats_by_type = {t: {
+            "total_bets": 0,
+            "closed_bets": 0,
+            "wins": 0,
+            "losses": 0,
+            "win_rate": 0.0,
+            "ROI": 0.0,
+            "net_profit": 0.0,
+            "total_stake": 0.0,
+            "total_odds": 0.0,
+            "average_odds": 0.0
+        } for t in bet_types}
+        for b in portfolio:
+            market = b.get("market", "")
+            is_combined = b.get("combined_bet", False)
+            b_type = classify_bet_type(market, is_combined)
+            status = b.get("status", "Pendiente")
+            stake = float(b.get("stake", 0.0))
+            odds = float(b.get("odds", 0.0))
+            profit = float(b.get("profit", 0.0))
+            stats_by_type[b_type]["total_bets"] += 1
+            stats_by_type[b_type]["total_odds"] += odds
+            if status in ["Ganada", "Perdida", "Nula"]:
+                stats_by_type[b_type]["closed_bets"] += 1
+                stats_by_type[b_type]["total_stake"] += stake
+                stats_by_type[b_type]["net_profit"] += profit
+                if status == "Ganada":
+                    stats_by_type[b_type]["wins"] += 1
+                elif status == "Perdida":
+                    stats_by_type[b_type]["losses"] += 1
+        type_rows = []
+        for t in bet_types:
+            tdata = stats_by_type[t]
+            if tdata["total_bets"] > 0:
+                tdata["average_odds"] = tdata["total_odds"] / tdata["total_bets"]
+            if tdata["closed_bets"] > 0:
+                tdata["win_rate"] = tdata["wins"] / tdata["closed_bets"]
+                tdata["ROI"] = tdata["net_profit"] / tdata["total_stake"]
+            t_roi = tdata["ROI"] * 100.0
+            t_acc = tdata["win_rate"] * 100.0
+            type_rows.append({
+                "Tipo de apuesta": t,
+                "Apuestas cerradas": tdata["closed_bets"],
+                "Acierto": f"{t_acc:.1f}%",
+                "Beneficio": f"{tdata['net_profit']:+.2f} €",
+                "ROI": f"{t_roi:+.1f}%",
+                "Cuota media": f"{tdata['average_odds']:.2f}"
+            })
+        st.dataframe(pd.DataFrame(type_rows), use_container_width=True, hide_index=True)
+        
+    exp3 = st.expander("Historial cronológico")
+    with exp3:
+        if portfolio:
+            chrono_rows = []
+            for b in sorted(portfolio, key=lambda x: x.get("date_placed", ""), reverse=True):
+                chrono_rows.append({
+                    "Fecha": b.get("date_placed", "")[:10] if b.get("date_placed") else "",
+                    "Partido": b.get("match", ""),
+                    "Competición": b.get("competition", ""),
+                    "Casa de apuestas": b.get("betting_house", ""),
+                    "Apuesta": translate_market_to_spanish(b.get("market", "")),
+                    "Cuota": f"{float(b.get('odds', 0.0)):.2f}",
+                    "Importe": f"{float(b.get('stake', 0.0)):.2f} €",
+                    "Estado": b.get("status", "Pendiente"),
+                    "Beneficio": f"{float(b.get('profit', 0.0)):+.2f} €"
+                })
+            st.dataframe(pd.DataFrame(chrono_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay apuestas en la Cartera para mostrar en el historial.")

@@ -223,7 +223,11 @@ with tab1:
             key="prompt_markets_input"
         )
     
-    prompt_text = f"""Please search current information about the football match "{prompt_match}" in the "{prompt_competition}" ({prompt_phase} phase).
+    if "generated_prompt" not in st.session_state:
+        st.session_state.generated_prompt = ""
+
+    if st.button("GENERATE / UPDATE AI PROMPT", use_container_width=True):
+        prompt_text = f"""Please search current information about the football match "{prompt_match}" in the "{prompt_competition}" ({prompt_phase} phase).
 Review odds, lineups, injuries, suspensions, recent form, FIFA ranking or Elo, tactical context, referee if available, corners, cards, goals and shots. Use "{prompt_house}" as the betting house preference if possible.
 
 Based on your research and analysis, estimate probabilities for the following markets: {prompt_markets}
@@ -254,17 +258,19 @@ Please be conservative with:
 - aggressive handicaps,
 - under bets based only on defensive style,
 - cards totals without referee information."""
+        st.session_state.generated_prompt = prompt_text
+        st.session_state.generated_prompt_area = prompt_text
 
     st.text_area(
         "Generated AI Research Prompt",
-        value=prompt_text,
+        value=st.session_state.generated_prompt,
         height=350,
         key="generated_prompt_area"
     )
     
     st.markdown(
         '<p style="font-size: 13px; color: #a0aec0; margin-top: -10px; margin-bottom: 25px;">'
-        '“Copy this prompt, send it to your AI assistant, then paste the returned CSV into the market input box below.”'
+        '“Click the button after editing the match details. Then copy the generated prompt and send it to your AI assistant.”'
         '</p>',
         unsafe_allow_html=True
     )

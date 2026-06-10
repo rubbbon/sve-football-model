@@ -378,7 +378,8 @@ def render_altair_chart(df):
 # Page configurations
 st.set_page_config(
     page_title="CALCULADORA DE APUESTAS",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 # Custom Injectable CSS styling to achieve the requested red, black, and white professional trading theme
@@ -386,7 +387,7 @@ st.markdown("""
 <style>
 /* Dark base background for the entire dashboard */
 .stApp {
-    background-color: #0b0d10 !important;
+    background-color: #080808 !important;
     color: #F5F5F5 !important;
 }
 
@@ -409,16 +410,16 @@ st.markdown("""
 
 /* Layout section modules */
 .module {
-    background-color: #12161a !important;
+    background-color: #111111 !important;
     padding: 22px !important;
     border-radius: 12px !important;
-    border: 1px solid #262c35 !important;
+    border: 1px solid #222222 !important;
     margin-bottom: 20px !important;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2) !important;
 }
 
 .formula {
-    background-color: #12161a;
+    background-color: #111111;
     padding: 18px;
     border-radius: 10px;
     border-left: 4px solid #E30613;
@@ -437,7 +438,7 @@ label, .stSlider label, .stTextInput label, .stNumberInput label, .stSelectbox l
 
 /* Dark backgrounds for inputs, text areas and select boxes with white text and red borders */
 input[type="text"], input[type="number"], textarea {
-    background-color: #12161a !important;
+    background-color: #111111 !important;
     color: #F5F5F5 !important;
     border: 2px solid #E30613 !important;
     border-radius: 8px !important;
@@ -453,7 +454,7 @@ input::placeholder, textarea::placeholder {
 
 /* Selectbox container styling */
 div[data-baseweb="select"] > div {
-    background-color: #12161a !important;
+    background-color: #111111 !important;
     color: #F5F5F5 !important;
     border: 2px solid #E30613 !important;
     border-radius: 8px !important;
@@ -473,12 +474,12 @@ div[data-baseweb="select"] svg {
 
 /* Dropdown list popover styling */
 div[data-baseweb="popover"] {
-    background-color: #12161a !important;
+    background-color: #111111 !important;
     border: 1px solid #E30613 !important;
 }
 
 div[data-baseweb="popover"] li {
-    background-color: #12161a !important;
+    background-color: #111111 !important;
     color: #F5F5F5 !important;
     font-weight: 600 !important;
 }
@@ -534,8 +535,8 @@ div.stButton > button:hover {
 
 /* Adjust dataframe wrapper for dark-theme contrast and readability */
 div[data-testid="stDataFrame"] {
-    background-color: #12161a !important;
-    border: 1px solid #262c35 !important;
+    background-color: #111111 !important;
+    border: 1px solid #222222 !important;
     border-radius: 8px !important;
 }
 
@@ -552,14 +553,15 @@ div[data-testid="stMetricLabel"] {
 
 /* Home Navigation Card Grid styling */
 .home-card div.stButton > button {
-    background-color: #0b0d10 !important;
+    background-color: #0b0b0b !important;
     color: #E30613 !important;
     border: 1px solid #E30613 !important;
     border-radius: 8px !important;
     font-size: 18px !important;
     font-weight: 700 !important;
     padding: 1.5rem 1rem !important;
-    height: 90px !important;
+    height: 100px !important;
+    width: 100% !important;
     text-align: center !important;
     display: flex !important;
     align-items: center !important;
@@ -577,8 +579,8 @@ div[data-testid="stMetricLabel"] {
 .top-user-box {
     text-align: right;
     padding: 10px;
-    background-color: #12161a;
-    border: 1px solid #262c35;
+    background-color: #111111;
+    border: 1px solid #222222;
     border-radius: 8px;
     margin-top: 10px;
 }
@@ -604,7 +606,7 @@ div[data-testid="stMetricLabel"] {
 
 /* Metric / Insight Cards */
 .metric-box {
-    background-color: #12161a;
+    background-color: #111111;
     border: 1px solid #E30613;
     border-radius: 8px;
     padding: 15px;
@@ -624,8 +626,8 @@ div[data-testid="stMetricLabel"] {
     margin-top: 5px;
 }
 .mini-metric-box {
-    background-color: #12161a;
-    border: 1px solid #262c35;
+    background-color: #111111;
+    border: 1px solid #222222;
     border-radius: 6px;
     padding: 10px;
     text-align: center;
@@ -633,7 +635,7 @@ div[data-testid="stMetricLabel"] {
     color: #ffffff;
 }
 .insight-card {
-    background-color: #12161a;
+    background-color: #111111;
     border: 1px solid #E30613;
     border-radius: 8px;
     padding: 18px;
@@ -666,14 +668,14 @@ div[data-testid="stMetricLabel"] {
 
 /* Sidebar styling overrides */
 section[data-testid="stSidebar"] {
-    background-color: #0b0d10 !important;
-    border-right: 1px solid #262c35 !important;
+    background-color: #080808 !important;
+    border-right: 1px solid #222222 !important;
 }
 
 section[data-testid="stSidebar"] div[role="radiogroup"] label {
-    background-color: #12161a !important;
+    background-color: #111111 !important;
     color: #F5F5F5 !important;
-    border: 1px solid #262c35 !important;
+    border: 1px solid #222222 !important;
     border-radius: 6px !important;
     padding: 8px 12px !important;
     margin-bottom: 6px !important;
@@ -764,37 +766,53 @@ if "intro_seen" not in st.session_state:
 portfolio = st.session_state.get("portfolio", [])
 metrics_glob = calculate_balance_metrics(portfolio)
 
-# 3. Main Title & Profile block layout
-col_title, col_user = st.columns([3, 1.2])
-with col_title:
-    st.markdown('<div class="big-title">CALCULADORA DE APUESTAS</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Plataforma profesional de análisis de cuotas y gestión de cartera</div>', unsafe_allow_html=True)
-
+# 3. Top Right User Box Layout (Clickable balance text)
+col_empty, col_user = st.columns([3, 1.5])
 with col_user:
-    bal_val = metrics_glob["saldo_total"]
-    if bal_val > 0:
-        bal_color = "#00C853"
-        bal_sign = "+"
-    elif bal_val < 0:
-        bal_color = "#FF3B3B"
-        bal_sign = ""
-    else:
-        bal_color = "#ffffff"
-        bal_sign = ""
     st.markdown(f"""
-    <div class="top-user-box">
-        <div style="font-size: 13px; color: #a0aec0; font-weight: bold;">Usuario: <span style="color: #ffffff;">Usuario</span></div>
-        <div style="font-size: 16px; font-weight: 800; color: {bal_color}; margin-top: 3px;">
-            Saldo: {bal_sign}{bal_val:.2f} €
-        </div>
-    </div>
+    <style>
+    .balance-btn div.stButton > button {{
+        background-color: transparent !important;
+        color: {bal_color} !important;
+        border: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        font-size: 14px !important;
+        font-weight: bold !important;
+        text-transform: none !important;
+        letter-spacing: 0px !important;
+        box-shadow: none !important;
+        cursor: pointer !important;
+        width: auto !important;
+    }}
+    .balance-btn div.stButton > button:hover {{
+        color: #E30613 !important;
+        background-color: transparent !important;
+        text-decoration: underline !important;
+    }}
+    </style>
     """, unsafe_allow_html=True)
     
-    c_btn1, c_btn2 = st.columns([1, 2.2])
-    with c_btn2:
-        if st.button("Ver evolución", key="top_ver_evolucion_btn"):
-            st.session_state.current_section = "Evolución del saldo"
-            st.rerun()
+    st.markdown('<div class="top-user-box" style="display: flex; align-items: center; justify-content: flex-end;">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 14px; color: #a0aec0; font-weight: bold; margin-right: 5px;">Usuario | </div>', unsafe_allow_html=True)
+    st.markdown('<div class="balance-btn">', unsafe_allow_html=True)
+    if st.button(f"Saldo: {bal_sign}{bal_val:.2f} €", key="top_clickable_balance_btn"):
+        st.session_state.current_section = "Evolución del saldo"
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# 4. Main Title Section (Centered on Inicio, Left-aligned on others)
+if st.session_state.current_section == "Inicio":
+    st.markdown("""
+    <div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
+        <div class="big-title" style="font-size: 44px; margin-bottom: 10px;">CALCULADORA DE APUESTAS</div>
+        <div class="subtitle" style="font-size: 18px; color: #a0aec0;">Plataforma de análisis, gestión y seguimiento de apuestas</div>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown('<div class="big-title">CALCULADORA DE APUESTAS</div>', unsafe_allow_html=True)
+    st.markdown('<div class="subtitle">Plataforma de análisis, gestión y seguimiento de apuestas</div>', unsafe_allow_html=True)
 
 # 4. Left Sidebar Navigation Menu
 SECTIONS = [

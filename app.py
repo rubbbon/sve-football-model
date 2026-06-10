@@ -269,6 +269,8 @@ with tab1:
         st.session_state.config_phase = "Group"
     if "config_betting_house" not in st.session_state:
         st.session_state.config_betting_house = ""
+    if "config_recommendation_style" not in st.session_state:
+        st.session_state.config_recommendation_style = "Practical Value"
 
     st.header("1. AI Research Prompt Generator")
     st.markdown("Fill in the match details, click GENERATE / UPDATE AI PROMPT, send the generated prompt to your AI assistant, then paste the returned CSV into the Market CSV Input section.")
@@ -555,6 +557,11 @@ Please be conservative with:
         betting_house = st.text_input("Betting house", placeholder="Example: Winamax", key="config_betting_house")
         reliability = st.selectbox("Reliability", ["High", "Medium", "Low"], key="config_reliability")
         model_mode = st.selectbox("Model mode", ["Conservative", "Balanced", "Aggressive"], key="config_model_mode")
+        recommendation_style = st.selectbox(
+            "Recommendation Style",
+            ["Practical Value", "Strict Value", "Conservative Safety"],
+            key="config_recommendation_style"
+        )
 
     with col3:
         bankroll = st.number_input("Bankroll (€)", min_value=1.0, value=100.0, step=10.0)
@@ -656,7 +663,6 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             elif reliability == "Low":
                 theta += 0.03
 
-            # Calculate metrics for each market
             results = []
             for _, row in df_input.iterrows():
                 market = str(row["Market"])
@@ -678,21 +684,57 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 final_ranking_score = (adj_ev * 100.0) + (prob * 30.0) - (risk * 20.0) - (uncertainty * 20.0)
 
                 # Classification logic
-                if odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta:
-                    decision = "VALUE BET"
-                elif (
-                    (prob >= 0.60 and risk <= 0.20 and uncertainty <= 0.25 and odds >= 1.25 and simple_ev > -0.08) or
-                    (prob >= 0.70 and risk <= 0.18 and uncertainty <= 0.25 and odds >= 1.15) or
-                    (adj_ev >= theta - 0.04 and prob >= 0.55 and uncertainty <= 0.25)
-                ):
-                    decision = "SAFE PICK"
-                elif simple_ev > 0:
-                    decision = "WATCHLIST"
-                else:
-                    decision = "NO BET"
+                if recommendation_style == "Strict Value":
+                    if odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta:
+                        decision = "VALUE BET"
+                    elif (
+                        (prob >= 0.60 and risk <= 0.20 and uncertainty <= 0.25 and odds >= 1.25 and simple_ev > -0.08) or
+                        (prob >= 0.70 and risk <= 0.18 and uncertainty <= 0.25 and odds >= 1.15) or
+                        (adj_ev >= theta - 0.04 and prob >= 0.55 and uncertainty <= 0.25)
+                    ):
+                        decision = "SAFE PICK"
+                    elif simple_ev > 0:
+                        decision = "WATCHLIST"
+                    else:
+                        decision = "NO BET"
+
+                elif recommendation_style == "Practical Value":
+                    is_strict_value = (odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta)
+                    is_practical_value = (
+                        (odds >= cuota_minima and uncertainty <= 0.25 and risk <= 0.25 and simple_ev >= 0.03 and adj_ev >= -0.03) or
+                        (adj_ev > theta - 0.03 and simple_ev > 0 and prob >= 0.55 and uncertainty <= 0.25)
+                    )
+                    
+                    if is_strict_value:
+                        decision = "VALUE BET"
+                    elif is_practical_value:
+                        decision = "PRACTICAL VALUE"
+                    elif (
+                        (prob >= 0.60 and risk <= 0.20 and uncertainty <= 0.25 and odds >= 1.25 and simple_ev > -0.08) or
+                        (prob >= 0.70 and risk <= 0.18 and uncertainty <= 0.25 and odds >= 1.15) or
+                        (adj_ev >= theta - 0.04 and prob >= 0.55 and uncertainty <= 0.25)
+                    ):
+                        decision = "SAFE PICK"
+                    elif simple_ev > 0:
+                        decision = "WATCHLIST"
+                    else:
+                        decision = "NO BET"
+
+                else:  # Conservative Safety
+                    is_conservative_safe = (prob >= 0.65 and risk <= 0.22 and uncertainty <= 0.25 and odds >= 1.15)
+                    is_strict_value = (odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta)
+                    
+                    if is_conservative_safe:
+                        decision = "SAFE PICK"
+                    elif is_strict_value:
+                        decision = "VALUE BET"
+                    elif simple_ev > 0:
+                        decision = "WATCHLIST"
+                    else:
+                        decision = "NO BET"
 
                 # Stake sizing
-                if decision in ["VALUE BET", "SAFE PICK"]:
+                if decision in ["VALUE BET", "PRACTICAL VALUE", "SAFE PICK"]:
                     risk_type_cap = risk_type.capitalize()
                     if risk_type_cap == "Low":
                         stake = bankroll * 0.015
@@ -718,7 +760,8 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                     "Recommended Stake": stake,
                     "Decision": decision,
                     "Safety Score": safety_score,
-                    "Final Ranking Score": final_ranking_score
+                    "Final Ranking Score": final_ranking_score,
+                    "Recommendation Style Used": recommendation_style
                 })
 
             df_results = pd.DataFrame(results)
@@ -726,11 +769,13 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             # Extract groups
             total_markets = len(df_results)
             value_bets = df_results[df_results["Decision"] == "VALUE BET"]
+            practical_value_bets = df_results[df_results["Decision"] == "PRACTICAL VALUE"]
             safe_picks = df_results[df_results["Decision"] == "SAFE PICK"]
             watchlist_markets = df_results[df_results["Decision"] == "WATCHLIST"]
             no_bet_markets = df_results[df_results["Decision"] == "NO BET"]
 
             num_value_bets = len(value_bets)
+            num_practical_value = len(practical_value_bets)
             num_safe_picks = len(safe_picks)
             num_watchlist = len(watchlist_markets)
             num_no_bets = len(no_bet_markets)
@@ -743,7 +788,8 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             
             col_m1, col_m2, col_m3 = st.columns(3)
             with col_m1:
-                st.metric("Value Bets", num_value_bets)
+                # Count PRACTICAL VALUE together with VALUE BETS in the main dashboard
+                st.metric("Value Bets", num_value_bets + num_practical_value)
                 st.metric("Safe Picks", num_safe_picks)
             with col_m2:
                 st.metric("Watchlist Markets", num_watchlist)
@@ -752,7 +798,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 st.metric("Best Adjusted EV", f"{best_adjusted_ev * 100:.2f}%" if total_markets > 0 else "N/A")
                 st.metric("Best Safety Score", f"{best_safety_score:.1f}" if total_markets > 0 else "N/A")
 
-            st.progress(min(1.0, max(0.0, (num_value_bets + num_safe_picks) / max(1, total_markets))))
+            st.progress(min(1.0, max(0.0, (num_value_bets + num_practical_value + num_safe_picks) / max(1, total_markets))))
 
             # Formatted Results Table for general analysis
             st.subheader("📋 Detailed Calculation Table")
@@ -772,16 +818,18 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
 
             # Sort lists by Final Ranking Score descending
             value_bets_sorted = value_bets.sort_values(by="Final Ranking Score", ascending=False)
+            practical_value_sorted = practical_value_bets.sort_values(by="Final Ranking Score", ascending=False)
             safe_picks_sorted = safe_picks.sort_values(by="Final Ranking Score", ascending=False)
+            watchlist_sorted = watchlist_markets.sort_values(by="Final Ranking Score", ascending=False)
 
             # Final Model Output Section
             st.markdown("---")
             st.subheader("🏆 FINAL MODEL OUTPUT")
             
             if num_value_bets > 0:
-                st.success(f"### FINAL DECISION: {num_value_bets} VALUE BET(S) RECOMMENDED")
+                st.success(f"### FINAL DECISION: {num_value_bets} STRICT VALUE BET(S) RECOMMENDED")
                 
-                st.markdown("### VALUE BETS")
+                st.markdown("### STRICT VALUE BETS")
                 for idx, row in value_bets_sorted.head(max_picks).iterrows():
                     st.markdown(f"""
                     <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #e63946; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
@@ -796,6 +844,88 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                             <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
                             <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
                             <div><b>Decision:</b> <span class="status-ok">{row['Decision']}</span></div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                if num_practical_value > 0:
+                    st.markdown("### PRACTICAL VALUE BETS")
+                    for idx, row in practical_value_sorted.iterrows():
+                        st.markdown(f"""
+                        <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ff4d4d; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #ff4d4d;">{row['Market']}</span></h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                                <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                                <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                                <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                                <div><b>Adjusted EV:</b> <span style="color: #ffcc00; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                                <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                                <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                                <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                                <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                                <div><b>Decision:</b> <span style="color: #00ff88; font-weight: bold;">{row['Decision']}</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                if num_safe_picks > 0:
+                    st.markdown("### SAFE PICKS")
+                    for idx, row in safe_picks_sorted.iterrows():
+                        st.markdown(f"""
+                        <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ffcc00; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #ffcc00;">{row['Market']}</span></h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                                <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                                <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                                <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                                <div><b>Adjusted EV:</b> <span style="color: #ffcc00; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                                <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                                <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                                <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                                <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                                <div><b>Decision:</b> <span class="status-warn">{row['Decision']}</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                if num_watchlist > 0:
+                    st.markdown("### WATCHLIST")
+                    for idx, row in watchlist_sorted.iterrows():
+                        st.markdown(f"""
+                        <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #a0aec0;">{row['Market']}</span></h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                                <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                                <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                                <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                                <div><b>Adjusted EV:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                                <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                                <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                                <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                                <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                                <div><b>Decision:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Decision']}</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            elif num_practical_value > 0:
+                st.warning("### NO STRICT VALUE BET FOUND\n\nHowever, the following markets show practical positive value:")
+                
+                st.markdown("### PRACTICAL VALUE BETS")
+                for idx, row in practical_value_sorted.head(max_picks).iterrows():
+                    st.markdown(f"""
+                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ff4d4d; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #ff4d4d;">{row['Market']}</span></h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                            <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                            <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                            <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                            <div><b>Adjusted EV:</b> <span style="color: #00ff88; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                            <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                            <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                            <div><b>Decision:</b> <span style="color: #00ff88; font-weight: bold;">{row['Decision']}</span></div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -816,6 +946,26 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                                 <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
                                 <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
                                 <div><b>Decision:</b> <span class="status-warn">{row['Decision']}</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                if num_watchlist > 0:
+                    st.markdown("### WATCHLIST")
+                    for idx, row in watchlist_sorted.iterrows():
+                        st.markdown(f"""
+                        <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #a0aec0;">{row['Market']}</span></h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                                <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                                <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                                <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                                <div><b>Adjusted EV:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                                <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                                <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                                <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                                <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                                <div><b>Decision:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Decision']}</span></div>
                             </div>
                         </div>
                         """, unsafe_allow_html=True)
@@ -840,9 +990,49 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
+
+                if num_watchlist > 0:
+                    st.markdown("### WATCHLIST")
+                    for idx, row in watchlist_sorted.iterrows():
+                        st.markdown(f"""
+                        <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #a0aec0;">{row['Market']}</span></h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                                <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                                <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                                <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                                <div><b>Adjusted EV:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                                <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                                <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                                <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                                <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                                <div><b>Decision:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Decision']}</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
             
             else:
                 st.warning("### FINAL DECISION: NO BET\n\n**Reason:** No market passed the value or safety filters.")
+                
+                if num_watchlist > 0:
+                    st.markdown("### WATCHLIST")
+                    for idx, row in watchlist_sorted.iterrows():
+                        st.markdown(f"""
+                        <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                            <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Pick: <span style="color: #a0aec0;">{row['Market']}</span></h4>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
+                                <div><b>Odds:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
+                                <div><b>Estimated Prob:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
+                                <div><b>Implied Prob:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
+                                <div><b>Adjusted EV:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
+                                <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
+                                <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
+                                <div><b>Risk Type:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
+                                <div><b>Recommended Stake:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
+                                <div><b>Decision:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Decision']}</span></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
             
             st.caption(
                 "Notice: SVE calculates expected values based on statistical adjustments. Past performance does not guarantee future results."

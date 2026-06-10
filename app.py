@@ -382,6 +382,27 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Initialize session state keys safely at startup
+if "current_section" not in st.session_state:
+    st.session_state.current_section = "Inicio"
+if "intro_seen" not in st.session_state:
+    st.session_state.intro_seen = False
+if "generated_prompt" not in st.session_state:
+    st.session_state.generated_prompt = ""
+if "result_prompt" not in st.session_state:
+    st.session_state.result_prompt = ""
+if "user_name" not in st.session_state:
+    st.session_state.user_name = "Usuario"
+if "portfolio" not in st.session_state:
+    st.session_state.portfolio = []
+if "favorites" not in st.session_state:
+    st.session_state.favorites = []
+if "favourites" not in st.session_state:
+    st.session_state.favourites = []
+if "studied_matches" not in st.session_state:
+    st.session_state.studied_matches = []
+
+
 # Custom Injectable CSS styling to achieve the requested red, black, and white professional trading theme
 st.markdown("""
 <style>

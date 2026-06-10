@@ -412,8 +412,8 @@ Please be conservative with:
         st.session_state.generated_prompt = prompt_text
         st.session_state.generated_prompt_area = prompt_text
         
-        # Update Prompt Generator widget field to the cleaned name
-        st.session_state.prompt_match_input = cleaned_match
+        # Store cleaned match in a separate session state key
+        st.session_state.cleaned_match = cleaned_match
         
         # Connect AI Research Prompt Generator with Parameters & Configuration
         st.session_state.config_match = cleaned_match

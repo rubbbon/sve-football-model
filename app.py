@@ -5,9 +5,11 @@ import os
 import json
 import time
 import datetime
+import re
 
 # Favorites database file
 FAVORITES_FILE = "favorites.json"
+PORTFOLIO_FILE = "portfolio.json"
 
 def load_favorites():
     if "favorites" not in st.session_state:
@@ -27,8 +29,95 @@ def save_favorites():
     except Exception:
         pass
 
-# Load favorites at startup
+def load_portfolio():
+    if "portfolio" not in st.session_state:
+        if os.path.exists(PORTFOLIO_FILE):
+            try:
+                with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
+                    st.session_state.portfolio = json.load(f)
+            except Exception:
+                st.session_state.portfolio = []
+        else:
+            st.session_state.portfolio = []
+
+def save_portfolio():
+    try:
+        with open(PORTFOLIO_FILE, "w", encoding="utf-8") as f:
+            json.dump(st.session_state.portfolio, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+# Load databases at startup
 load_favorites()
+load_portfolio()
+
+def translate_market_to_spanish(market: str) -> str:
+    if not market:
+        return ""
+    
+    # Check if combined bet
+    if " + " in market:
+        parts = market.split(" + ")
+        translated_parts = [translate_market_to_spanish(p.strip()) for p in parts]
+        return " + ".join(translated_parts)
+        
+    m = market
+    
+    # Replacements for double chance
+    m = m.replace("or Draw double chance", "o empate (doble oportunidad)")
+    m = m.replace("or Draw", "o empate")
+    m = m.replace("double chance", "doble oportunidad")
+    
+    # Replacements for draw no bet
+    m = m.replace("draw no bet", "empate no válido")
+    
+    # Team win to nil / win
+    m = re.sub(r'\b([A-Za-z\s]+) win to nil\b', r'Gana \1 sin encajar', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+) win\b', r'Gana \1', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bDraw\b', 'Empate', m, flags=re.IGNORECASE)
+    
+    # Goals over / under
+    m = re.sub(r'\bUnder\s+([\d\.]+)\s+goals\b', r'Menos de \1 goles', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bOver\s+([\d\.]+)\s+goals\b', r'Más de \1 goles', m, flags=re.IGNORECASE)
+    
+    # Both teams to score
+    m = m.replace("Both teams to score - Yes", "Ambos equipos marcan: Sí")
+    m = m.replace("Both teams to score - No", "Ambos equipos marcan: No")
+    m = m.replace("both teams to score", "ambos equipos marcan")
+    
+    # Team goals
+    m = re.sub(r'\b([A-Za-z\s]+)\s+over\s+([\d\.]+)\s+team\s+goals\b', r'\1 más de \2 goles', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+under\s+([\d\.]+)\s+team\s+goals\b', r'\1 menos de \2 goles', m, flags=re.IGNORECASE)
+    
+    # Asian handicap
+    m = re.sub(r'\b([A-Za-z\s]+)\s+([\+\-\d\.]+)\s+Asian\s+handicap\b', r'\1 hándicap asiático \2', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+handicap\s+([\+\-\d\.]+)\b', r'\1 hándicap \2', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bAsian handicap\b', 'hándicap asiático', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bhandicap\b', 'hándicap', m, flags=re.IGNORECASE)
+    
+    # Cards
+    m = m.replace("most cards", "más tarjetas")
+    m = re.sub(r'\bTotal\s+cards\s+over\s+([\d\.]+)\b', r'Más de \1 tarjetas', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bTotal\s+cards\s+under\s+([\d\.]+)\b', r'Menos de \1 tarjetas', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+over\s+([\d\.]+)\s+cards\b', r'\1 más de \2 tarjetas', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+under\s+([\d\.]+)\s+cards\b', r'\1 menos de \2 tarjetas', m, flags=re.IGNORECASE)
+    
+    # Corners
+    m = re.sub(r'\bTotal\s+corners\s+over\s+([\d\.]+)\b', r'Más de \1 córners', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bTotal\s+corners\s+under\s+([\d\.]+)\b', r'Menos de \1 córners', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+over\s+([\d\.]+)\s+corners\b', r'\1 más de \2 córners', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+under\s+([\d\.]+)\s+corners\b', r'\1 menos de \2 córners', m, flags=re.IGNORECASE)
+    m = m.replace("corners", "córners")
+    
+    # Shots
+    m = re.sub(r'\bTotal\s+shots\s+over\s+([\d\.]+)\b', r'Más de \1 tiros', m, flags=re.IGNORECASE)
+    m = re.sub(r'\bTotal\s+shots\s+under\s+([\d\.]+)\b', r'Menos de \1 tiros', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+over\s+([\d\.]+)\s+shots\b', r'\1 más de \2 tiros', m, flags=re.IGNORECASE)
+    m = re.sub(r'\b([A-Za-z\s]+)\s+under\s+([\d\.]+)\s+shots\b', r'\1 menos de \2 tiros', m, flags=re.IGNORECASE)
+    m = m.replace("shots", "tiros")
+    m = m.replace("shots on target", "tiros a puerta")
+    
+    return m.strip()
 
 # Page configurations
 st.set_page_config(
@@ -43,14 +132,14 @@ st.markdown("""
 /* Dark base background for the entire dashboard */
 .stApp {
     background-color: #0b0d10 !important;
-    color: #f0f2f5 !important;
+    color: #F5F5F5 !important;
 }
 
 /* Page titles and headers */
 .big-title {
     font-size: 38px;
     font-weight: 800;
-    color: #e63946;
+    color: #E30613;
     margin-bottom: 2px;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -77,7 +166,7 @@ st.markdown("""
     background-color: #12161a;
     padding: 18px;
     border-radius: 10px;
-    border-left: 4px solid #e63946;
+    border-left: 4px solid #E30613;
     font-family: 'Courier New', monospace;
     font-size: 15px;
     color: #e2e8f0;
@@ -91,11 +180,11 @@ label, .stSlider label, .stTextInput label, .stNumberInput label, .stSelectbox l
     font-size: 14px !important;
 }
 
-/* Red backgrounds for inputs, text areas and select boxes with black text */
+/* Dark backgrounds for inputs, text areas and select boxes with white text and red borders */
 input[type="text"], input[type="number"], textarea {
-    background-color: #e63946 !important;
-    color: #000000 !important;
-    border: 2px solid #ff6b6b !important;
+    background-color: #12161a !important;
+    color: #F5F5F5 !important;
+    border: 2px solid #E30613 !important;
     border-radius: 8px !important;
     font-weight: 600 !important;
     font-size: 15px !important;
@@ -103,45 +192,45 @@ input[type="text"], input[type="number"], textarea {
 
 /* Placeholders inside inputs and textareas */
 input::placeholder, textarea::placeholder {
-    color: #2d3748 !important;
+    color: #718096 !important;
     opacity: 0.8 !important;
 }
 
 /* Selectbox container styling */
 div[data-baseweb="select"] > div {
-    background-color: #e63946 !important;
-    color: #000000 !important;
-    border: 2px solid #ff6b6b !important;
+    background-color: #12161a !important;
+    color: #F5F5F5 !important;
+    border: 2px solid #E30613 !important;
     border-radius: 8px !important;
     font-weight: 600 !important;
 }
 
 /* Selected option text inside selectbox */
 div[data-baseweb="select"] span {
-    color: #000000 !important;
+    color: #F5F5F5 !important;
     font-weight: 600 !important;
 }
 
 /* Selectbox dropdown arrow */
 div[data-baseweb="select"] svg {
-    fill: #000000 !important;
+    fill: #F5F5F5 !important;
 }
 
 /* Dropdown list popover styling */
 div[data-baseweb="popover"] {
-    background-color: #e63946 !important;
-    border: 1px solid #ff6b6b !important;
+    background-color: #12161a !important;
+    border: 1px solid #E30613 !important;
 }
 
 div[data-baseweb="popover"] li {
-    background-color: #e63946 !important;
-    color: #000000 !important;
+    background-color: #12161a !important;
+    color: #F5F5F5 !important;
     font-weight: 600 !important;
 }
 
 div[data-baseweb="popover"] li:hover {
-    background-color: #ff8585 !important;
-    color: #000000 !important;
+    background-color: #E30613 !important;
+    color: #ffffff !important;
 }
 
 /* Tabs styles */
@@ -152,26 +241,26 @@ div[data-testid="stTabBar"] button {
 }
 
 div[data-testid="stTabBar"] button[aria-selected="true"] {
-    color: #e63946 !important;
-    border-bottom-color: #e63946 !important;
+    color: #E30613 !important;
+    border-bottom-color: #E30613 !important;
 }
 
 /* Plus and minus buttons of Streamlit number inputs */
 button[kind="secondary"] {
-    background-color: #e63946 !important;
-    color: #000000 !important;
-    border: 1px solid #ff6b6b !important;
+    background-color: #E30613 !important;
+    color: #ffffff !important;
+    border: 1px solid #ff4d4d !important;
 }
 button[kind="secondary"]:hover {
-    background-color: #ff8585 !important;
-    color: #000000 !important;
+    background-color: #ff4d4d !important;
+    color: #ffffff !important;
 }
 
 /* Styled Primary Buttons */
 div.stButton > button {
-    background-color: #e63946 !important;
+    background-color: #E30613 !important;
     color: #ffffff !important;
-    border: 2px solid #ff6b6b !important;
+    border: 2px solid #ff4d4d !important;
     border-radius: 8px !important;
     font-weight: 700 !important;
     padding: 0.6rem 2.5rem !important;
@@ -183,9 +272,9 @@ div.stButton > button {
 
 div.stButton > button:hover {
     background-color: #ffffff !important;
-    color: #e63946 !important;
+    color: #E30613 !important;
     border-color: #ffffff !important;
-    box-shadow: 0 0 15px rgba(230, 57, 70, 0.4) !important;
+    box-shadow: 0 0 15px rgba(227, 6, 19, 0.4) !important;
 }
 
 /* Adjust dataframe wrapper for dark-theme contrast and readability */
@@ -229,7 +318,7 @@ st.markdown('<div class="big-title">CALCULADOR DE APUESTAS</div>', unsafe_allow_
 st.markdown('<div class="subtitle">Motor de análisis estadístico de fútbol y calculadora de combinadas de valor</div>', unsafe_allow_html=True)
 
 # Define Tabs
-tab1, tab2, tab3 = st.tabs(["1. Calculadora", "2. Favoritas", "3. Top cuotas"])
+tab1, tab2, tab3, tab4 = st.tabs(["1. Calculadora", "2. Favoritas", "3. Top cuotas", "4. Cartera"])
 
 def clean_match_name(text):
     if not text:
@@ -297,8 +386,6 @@ with tab1:
         st.session_state.config_phase = "Fase de grupos"
     if "config_betting_house" not in st.session_state:
         st.session_state.config_betting_house = ""
-    if "config_recommendation_style" not in st.session_state:
-        st.session_state.config_recommendation_style = "Valor práctico"
     if "config_total_stake" not in st.session_state:
         st.session_state.config_total_stake = 10.0
     if "config_num_picks" not in st.session_state:
@@ -377,7 +464,7 @@ with tab1:
         else:
             prompt_house = prompt_house_choice
 
-        prompt_preset = st.selectbox(
+        prompt_presets = st.multiselect(
             "Tipo de análisis de mercados",
             [
                 "Análisis completo",
@@ -390,9 +477,10 @@ with tab1:
                 "Hándicaps",
                 "Personalizado"
             ],
-            key="prompt_market_preset"
+            default=["Análisis completo"],
+            key="prompt_market_presets"
         )
-        st.caption("Elige Análisis completo para un examen detallado del modelo, o selecciona un área específica como Goles, Córners, Tarjetas o Tiros.")
+        st.caption("Elige uno o varios análisis para un examen detallado del modelo (Goles, Córners, Tarjetas, Tiros, Hándicaps, etc.).")
         
         preset_mapping = {
             "Análisis completo": "1X2, double chance, draw no bet, goals, under/over 2.5, under/over 3.5, both teams to score, team goals, corners, team corners, cards, team cards, shots, shots on target, handicaps, Asian handicaps",
@@ -405,15 +493,28 @@ with tab1:
             "Hándicaps": "European handicaps, Asian handicaps, favorite handicap, underdog positive handicap, low-risk handicap lines"
         }
         
-        if prompt_preset == "Personalizado":
-            prompt_markets = st.text_area(
+        markets_list = []
+        for pr in prompt_presets:
+            if pr in preset_mapping:
+                for item in preset_mapping[pr].split(","):
+                    item_clean = item.strip()
+                    if item_clean and item_clean not in markets_list:
+                        markets_list.append(item_clean)
+                        
+        if "Personalizado" in prompt_presets:
+            prompt_markets_custom_text = st.text_area(
                 "Mercados personalizados a analizar",
                 placeholder="Ejemplo: Córners de España, tarjetas de Cabo Verde, más de 1.5 goles de España",
                 height=125,
-                key="prompt_markets_custom"
+                key="prompt_markets_custom_input"
             )
-        else:
-            prompt_markets = preset_mapping[prompt_preset]
+            if prompt_markets_custom_text:
+                for item in prompt_markets_custom_text.split(","):
+                    item_clean = item.strip()
+                    if item_clean and item_clean not in markets_list:
+                        markets_list.append(item_clean)
+                        
+        prompt_markets = ", ".join(markets_list)
     
     if "generated_prompt" not in st.session_state:
         st.session_state.generated_prompt = ""
@@ -604,23 +705,30 @@ Please be conservative with:
         betting_house = st.text_input("Casa de apuestas", placeholder="Ejemplo: Winamax", key="config_betting_house")
 
     with col2:
-        bankroll = st.number_input("Depósito (€)", min_value=1.0, value=100.0, step=10.0)
         total_stake = st.number_input("Cantidad total a apostar (€)", min_value=1.0, value=st.session_state.config_total_stake, step=1.0)
-        num_picks = st.slider("Número de apuestas recomendadas", 1, 5, int(st.session_state.config_num_picks))
-        stake_strategy = st.selectbox(
-            "Estrategia de reparto", 
-            ["Reparto equilibrado", "Principal + secundaria", "Conservadora"], 
-            index=["Reparto equilibrado", "Principal + secundaria", "Conservadora"].index(st.session_state.config_stake_strategy)
+        num_picks = st.slider("Número de apuestas recomendadas", 2, 3, int(st.session_state.config_num_picks) if st.session_state.config_num_picks in [2, 3] else 2)
+        
+        if num_picks == 2:
+            strategy_options = ["50 / 50", "60 / 40", "70 / 30", "75 / 25", "80 / 20"]
+        else:
+            strategy_options = ["60 / 25 / 15", "50 / 30 / 20", "70 / 20 / 10"]
+            
+        valid_defaults = []
+        if "config_stake_strategies" in st.session_state:
+            valid_defaults = [s for s in st.session_state.config_stake_strategies if s in strategy_options]
+        if not valid_defaults:
+            valid_defaults = [strategy_options[0]]
+            
+        selected_strategies = st.multiselect(
+            "Estrategia de reparto",
+            options=strategy_options,
+            default=valid_defaults,
+            key="config_stake_strategies"
         )
 
     with col3:
         reliability = st.selectbox("Fiabilidad de los datos", ["Alta", "Media", "Baja"], key="config_reliability")
         model_mode = st.selectbox("Modo del modelo", ["Conservador", "Equilibrado", "Agresivo"], key="config_model_mode")
-        recommendation_style = st.selectbox(
-            "Estilo de recomendación",
-            ["Valor práctico", "Valor estricto", "Seguridad conservadora"],
-            key="config_recommendation_style"
-        )
         cuota_minima = st.number_input("Cuota mínima objetivo", min_value=1.01, value=st.session_state.config_cuota_minima, step=0.01)
         cuota_maxima = st.number_input("Cuota máxima objetivo", min_value=1.01, value=st.session_state.config_cuota_maxima, step=0.01)
         allow_combined = st.checkbox("Permitir combinadas", value=st.session_state.config_allow_combined)
@@ -693,176 +801,45 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
         if not valid_csv:
             st.error("No se pueden calcular las apuestas. Por favor, corrige los errores de validación del CSV anteriores.")
         else:
-            # Map Spanish selectbox values to English for calculations
-            model_mode_eng = {
-                "Conservador": "Conservative",
-                "Equilibrado": "Balanced",
-                "Agresivo": "Aggressive"
-            }.get(model_mode, "Balanced")
+            # Contradiction filter
+            def are_contradictory(m1: str, m2: str) -> bool:
+                m1_l = m1.lower()
+                m2_l = m2.lower()
+                if "both teams to score" in m1_l and "both teams to score" in m2_l:
+                    if ("yes" in m1_l and "no" in m2_l) or ("no" in m1_l and "yes" in m2_l):
+                        return True
+                if "win" in m1_l and "win" in m2_l:
+                    w1 = m1_l.replace("win", "").strip()
+                    w2 = m2_l.replace("win", "").strip()
+                    if w1 != w2 and w1 and w2:
+                        return True
+                if "win to nil" in m1_l and "both teams to score" in m2_l and "yes" in m2_l:
+                    return True
+                if "win to nil" in m2_l and "both teams to score" in m1_l and "yes" in m1_l:
+                    return True
+                if ("over" in m1_l and "under" in m2_l) or ("under" in m1_l and "over" in m2_l):
+                    r1 = m1_l.replace("over", "").replace("under", "").strip()
+                    r2 = m2_l.replace("over", "").replace("under", "").strip()
+                    if r1 == r2:
+                        return True
+                return False
 
-            phase_eng = {
-                "Fase de grupos": "Group",
-                "Eliminatoria": "Knockout",
-                "Semifinal": "Semifinal",
-                "Final": "Final"
-            }.get(phase, "Group")
-
-            reliability_eng = {
-                "Alta": "High",
-                "Media": "Medium",
-                "Baja": "Low"
-            }.get(reliability, "Medium")
-
-            recommendation_style_eng = {
-                "Valor práctico": "Practical Value",
-                "Valor estricto": "Strict Value",
-                "Seguridad conservadora": "Conservative Safety"
-            }.get(recommendation_style, "Practical Value")
-
-            # Model mode configuration parameters (lambda and rho)
-            if model_mode_eng == "Conservative":
-                lamb = 0.25
-                rho = 0.25
-            elif model_mode_eng == "Balanced":
-                lamb = 0.18
-                rho = 0.18
-            else:  # Aggressive
-                lamb = 0.12
-                rho = 0.12
-
-            # Phase-based minimum adjusted EV thresholds (theta)
-            if phase_eng == "Group":
-                theta = 0.04
-            elif phase_eng == "Knockout":
-                theta = 0.06
-            elif phase_eng == "Semifinal":
-                theta = 0.07
-            else:  # Final
-                theta = 0.08
-
-            # Reliability adjustments
-            if reliability_eng == "Medium":
-                theta += 0.01
-            elif reliability_eng == "Low":
-                theta += 0.03
-
-            results = []
+            # Simple bet candidates
+            candidates = []
+            under_1_50_markets = []
             for _, row in df_input.iterrows():
-                market = str(row["Market"])
                 odds = float(row["Odds"])
                 prob = float(row["Probability"]) / 100.0
                 risk = float(row["Risk"]) / 100.0
-                uncertainty = float(row["Uncertainty"]) / 100.0
+                unc = float(row["Uncertainty"]) / 100.0
                 risk_type = str(row["Type"]).strip()
 
-                # Model calculations
-                implied_prob = 1.0 / odds
-                edge = prob - implied_prob
-                simple_ev = (prob * odds) - 1.0
-                adj_prob = prob - (lamb * uncertainty) - (rho * risk)
-                adj_ev = (adj_prob * odds) - 1.0
-
-                # Scores
-                safety_score = (prob * 100.0) - (risk * 50.0) - (uncertainty * 50.0)
-                final_ranking_score = (adj_ev * 100.0) + (prob * 30.0) - (risk * 20.0) - (uncertainty * 20.0)
-
-                # Classification logic
-                if recommendation_style_eng == "Strict Value":
-                    if odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta:
-                        decision = "VALUE BET"
-                    elif (
-                        (prob >= 0.60 and risk <= 0.20 and uncertainty <= 0.25 and odds >= 1.25 and simple_ev > -0.08) or
-                        (prob >= 0.70 and risk <= 0.18 and uncertainty <= 0.25 and odds >= 1.15) or
-                        (adj_ev >= theta - 0.04 and prob >= 0.55 and uncertainty <= 0.25)
-                    ):
-                        decision = "SAFE PICK"
-                    elif simple_ev > 0:
-                        decision = "WATCHLIST"
-                    else:
-                        decision = "NO BET"
-
-                elif recommendation_style_eng == "Practical Value":
-                    is_strict_value = (odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta)
-                    is_practical_value = (
-                        (odds >= cuota_minima and uncertainty <= 0.25 and risk <= 0.25 and simple_ev >= 0.03 and adj_ev >= -0.03) or
-                        (adj_ev > theta - 0.03 and simple_ev > 0 and prob >= 0.55 and uncertainty <= 0.25)
-                    )
+                # Add simple candidates
+                if (cuota_minima <= odds <= cuota_maxima and 
+                    prob >= 0.45 and 
+                    risk <= 0.35 and 
+                    unc <= 0.35):
                     
-                    if is_strict_value:
-                        decision = "VALUE BET"
-                    elif is_practical_value:
-                        decision = "PRACTICAL VALUE"
-                    elif (
-                        (prob >= 0.60 and risk <= 0.20 and uncertainty <= 0.25 and odds >= 1.25 and simple_ev > -0.08) or
-                        (prob >= 0.70 and risk <= 0.18 and uncertainty <= 0.25 and odds >= 1.15) or
-                        (adj_ev >= theta - 0.04 and prob >= 0.55 and uncertainty <= 0.25)
-                    ):
-                        decision = "SAFE PICK"
-                    elif simple_ev > 0:
-                        decision = "WATCHLIST"
-                    else:
-                        decision = "NO BET"
-
-                else:  # Conservative Safety
-                    is_conservative_safe = (prob >= 0.65 and risk <= 0.22 and uncertainty <= 0.25 and odds >= 1.15)
-                    is_strict_value = (odds >= cuota_minima and uncertainty < 0.35 and adj_ev > theta)
-                    
-                    if is_conservative_safe:
-                        decision = "SAFE PICK"
-                    elif is_strict_value:
-                        decision = "VALUE BET"
-                    elif simple_ev > 0:
-                        decision = "WATCHLIST"
-                    else:
-                        decision = "NO BET"
-
-                # Stake sizing
-                if decision in ["VALUE BET", "PRACTICAL VALUE", "SAFE PICK"]:
-                    risk_type_cap = risk_type.capitalize()
-                    if risk_type_cap == "Low":
-                        stake = bankroll * 0.015
-                    elif risk_type_cap == "Medium":
-                        stake = bankroll * 0.010
-                    elif risk_type_cap == "High":
-                        stake = bankroll * 0.005
-                    else:
-                        stake = bankroll * 0.010  # default fallback
-                else:
-                    stake = 0.0
-
-                results.append({
-                    "Market": market,
-                    "Odds": odds,
-                    "Estimated Probability": prob,
-                    "Implied Probability": implied_prob,
-                    "Edge": edge,
-                    "Adjusted Probability": adj_prob,
-                    "Simple EV": simple_ev,
-                    "Adjusted EV": adj_ev,
-                    "Risk Type": risk_type,
-                    "Recommended Stake": stake,
-                    "Decision": decision,
-                    "Safety Score": safety_score,
-                    "Final Ranking Score": final_ranking_score,
-                    "Recommendation Style Used": recommendation_style
-                })
-
-            df_results = pd.DataFrame(results)
-
-            # Build simple and combined bet recommendations (odds between cuota_minima and cuota_maxima)
-            candidates = []
-            n_rows = len(df_input)
-            
-            # Size 1 (Simple bets)
-            for i in range(n_rows):
-                row = df_input.iloc[i]
-                odds = float(row["Odds"])
-                prob = float(row["Probability"])
-                risk = float(row["Risk"])
-                unc = float(row["Uncertainty"])
-                risk_type = str(row["Type"]).strip()
-                
-                if cuota_minima <= odds <= cuota_maxima:
                     candidates.append({
                         "combined_bet": False,
                         "legs": [{"market": row["Market"], "odds": odds, "probability": prob, "risk": risk, "uncertainty": unc, "type": risk_type}],
@@ -872,83 +849,65 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                         "risk": risk,
                         "uncertainty": unc,
                         "type": risk_type,
-                        "safety_score": prob - (risk * 0.5) - (unc * 0.5)
+                        "safety_score": (prob * 100.0) - (risk * 40.0) - (unc * 40.0)
                     })
-            
-            # Size 2 (Combined bets)
-            if allow_combined:
-                for i in range(n_rows):
-                    for j in range(i + 1, n_rows):
-                        row1 = df_input.iloc[i]
-                        row2 = df_input.iloc[j]
-                        
-                        c_odds = float(row1["Odds"]) * float(row2["Odds"])
-                        if cuota_minima <= c_odds <= cuota_maxima:
-                            c_prob = (float(row1["Probability"]) / 100.0) * (float(row2["Probability"]) / 100.0) * 100.0
-                            c_risk = max(float(row1["Risk"]), float(row2["Risk"]))
-                            c_unc = max(float(row1["Uncertainty"]), float(row2["Uncertainty"]))
+                
+                # Collect candidates under 1.50 for combined bets
+                if odds < 1.50 and prob >= 0.45 and risk <= 0.35 and unc <= 0.35:
+                    under_1_50_markets.append({
+                        "market": row["Market"],
+                        "odds": odds,
+                        "probability": prob,
+                        "risk": risk,
+                        "uncertainty": unc,
+                        "type": risk_type
+                    })
+
+            # Combined bet candidates
+            if allow_combined and len(under_1_50_markets) >= 2:
+                for i in range(len(under_1_50_markets)):
+                    for j in range(i + 1, len(under_1_50_markets)):
+                        m1 = under_1_50_markets[i]
+                        m2 = under_1_50_markets[j]
+
+                        if are_contradictory(m1["market"], m2["market"]):
+                            continue
+
+                        c_odds = m1["odds"] * m2["odds"]
+                        c_prob = m1["probability"] * m2["probability"]
+                        c_risk = ((m1["risk"] + m2["risk"]) / 2.0) + 0.05
+                        c_unc = ((m1["uncertainty"] + m2["uncertainty"]) / 2.0) + 0.05
+
+                        if (cuota_minima <= c_odds <= cuota_maxima and 
+                            c_prob >= 0.35 and 
+                            c_risk <= 0.35 and 
+                            c_unc <= 0.35):
                             
                             type_map = {"Low": 1, "Medium": 2, "High": 3}
                             inv_type_map = {1: "Low", 2: "Medium", 3: "High"}
-                            t1 = type_map.get(str(row1["Type"]).strip(), 2)
-                            t2 = type_map.get(str(row2["Type"]).strip(), 2)
+                            t1 = type_map.get(m1["type"], 2)
+                            t2 = type_map.get(m2["type"], 2)
                             c_type = inv_type_map[max(t1, t2)]
-                            
+
                             candidates.append({
                                 "combined_bet": True,
-                                "legs": [
-                                    {"market": row1["Market"], "odds": float(row1["Odds"]), "probability": float(row1["Probability"]), "risk": float(row1["Risk"]), "uncertainty": float(row1["Uncertainty"]), "type": row1["Type"]},
-                                    {"market": row2["Market"], "odds": float(row2["Odds"]), "probability": float(row2["Probability"]), "risk": float(row2["Risk"]), "uncertainty": float(row2["Uncertainty"]), "type": row2["Type"]}
-                                ],
-                                "market": f"{row1['Market']} + {row2['Market']}",
+                                "legs": [m1, m2],
+                                "market": f"{m1['market']} + {m2['market']}",
                                 "odds": c_odds,
                                 "probability": c_prob,
                                 "risk": c_risk,
                                 "uncertainty": c_unc,
                                 "type": c_type,
-                                "safety_score": c_prob - (c_risk * 0.5) - (c_unc * 0.5)
+                                "safety_score": (c_prob * 100.0) - (c_risk * 40.0) - (c_unc * 40.0)
                             })
-                            
-                # Size 3 (Combined bets)
-                for i in range(n_rows):
-                    for j in range(i + 1, n_rows):
-                        for k in range(j + 1, n_rows):
-                            row1 = df_input.iloc[i]
-                            row2 = df_input.iloc[j]
-                            row3 = df_input.iloc[k]
-                            
-                            c_odds = float(row1["Odds"]) * float(row2["Odds"]) * float(row3["Odds"])
-                            if cuota_minima <= c_odds <= cuota_maxima:
-                                c_prob = (float(row1["Probability"]) / 100.0) * (float(row2["Probability"]) / 100.0) * (float(row3["Probability"]) / 100.0) * 100.0
-                                c_risk = max(float(row1["Risk"]), float(row2["Risk"]), float(row3["Risk"]))
-                                c_unc = max(float(row1["Uncertainty"]), float(row2["Uncertainty"]), float(row3["Uncertainty"]))
-                                
-                                type_map = {"Low": 1, "Medium": 2, "High": 3}
-                                inv_type_map = {1: "Low", 2: "Medium", 3: "High"}
-                                t1 = type_map.get(str(row1["Type"]).strip(), 2)
-                                t2 = type_map.get(str(row2["Type"]).strip(), 2)
-                                t3 = type_map.get(str(row3["Type"]).strip(), 2)
-                                c_type = inv_type_map[max(t1, t2, t3)]
-                                
-                                candidates.append({
-                                    "combined_bet": True,
-                                    "legs": [
-                                        {"market": row1["Market"], "odds": float(row1["Odds"]), "probability": float(row1["Probability"]), "risk": float(row1["Risk"]), "uncertainty": float(row1["Uncertainty"]), "type": row1["Type"]},
-                                        {"market": row2["Market"], "odds": float(row2["Odds"]), "probability": float(row2["Probability"]), "risk": float(row2["Risk"]), "uncertainty": float(row2["Uncertainty"]), "type": row2["Type"]},
-                                        {"market": row3["Market"], "odds": float(row3["Odds"]), "probability": float(row3["Probability"]), "risk": float(row3["Risk"]), "uncertainty": float(row3["Uncertainty"]), "type": row3["Type"]}
-                                    ],
-                                    "market": f"{row1['Market']} + {row2['Market']} + {row3['Market']}",
-                                    "odds": c_odds,
-                                    "probability": c_prob,
-                                    "risk": c_risk,
-                                    "uncertainty": c_unc,
-                                    "type": c_type,
-                                    "safety_score": c_prob - (c_risk * 0.5) - (c_unc * 0.5)
-                                })
-                                
-            # Sort candidates by probability descending, safety score descending
-            candidates_sorted = sorted(candidates, key=lambda x: (x["probability"], x["safety_score"], x["odds"]), reverse=True)
-            
+
+            # Sort and filter top recommendations
+            def cand_sort_key(x):
+                dist_1_80 = abs(x["odds"] - 1.80)
+                return (-x["probability"], -x["safety_score"], x["risk"], x["uncertainty"], dist_1_80)
+
+            candidates_sorted = sorted(candidates, key=cand_sort_key)
+
             selected_recommendations = []
             used_markets = set()
             for cand in candidates_sorted:
@@ -959,47 +918,17 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 if len(selected_recommendations) >= num_picks:
                     break
 
-            # Calculate stakes
-            rec_stakes = []
-            M = len(selected_recommendations)
-            if M > 0:
-                if M == 1:
-                    rec_stakes = [total_stake]
-                elif M == 2:
-                    if stake_strategy == "Reparto equilibrado":
-                        rec_stakes = [total_stake * 0.5, total_stake * 0.5]
-                    elif stake_strategy == "Principal + secundaria":
-                        rec_stakes = [total_stake * 0.75, total_stake * 0.25]
-                    else:  # Conservadora
-                        rec_stakes = [total_stake * 0.80, total_stake * 0.20]
-                elif M == 3:
-                    if stake_strategy == "Reparto equilibrado":
-                        rec_stakes = [total_stake / 3.0, total_stake / 3.0, total_stake / 3.0]
-                    elif stake_strategy == "Principal + secundaria":
-                        rec_stakes = [total_stake * 0.60, total_stake * 0.25, total_stake * 0.15]
-                    else:  # Conservadora
-                        rec_stakes = [total_stake * 0.70, total_stake * 0.20, total_stake * 0.10]
-                else:
-                    if stake_strategy == "Reparto equilibrado":
-                        rec_stakes = [total_stake / M] * M
-                    elif stake_strategy == "Principal + secundaria":
-                        rec_stakes = [total_stake * 0.50] + [total_stake * 0.50 / (M - 1)] * (M - 1)
-                    else:  # Conservadora
-                        rec_stakes = [total_stake * 0.60] + [total_stake * 0.40 / (M - 1)] * (M - 1)
-
             # Store in session state
             st.session_state.calculated_results = {
-                "df_results": df_results,
                 "selected_recommendations": selected_recommendations,
-                "rec_stakes": rec_stakes,
                 "match": match,
                 "competition": competition,
                 "betting_house": betting_house,
                 "total_stake": total_stake,
                 "num_picks": num_picks,
-                "stake_strategy": stake_strategy
+                "selected_strategies": selected_strategies
             }
-            
+
             # Save latest markets for Top cuotas
             st.session_state.latest_markets = []
             for _, row in df_input.iterrows():
@@ -1018,556 +947,404 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
     # Render results if they exist in session state
     if "calculated_results" in st.session_state and st.session_state.calculated_results is not None:
         res = st.session_state.calculated_results
-        df_results = res["df_results"]
         selected_recommendations = res["selected_recommendations"]
-        rec_stakes = res["rec_stakes"]
         c_match = res["match"]
         c_competition = res["competition"]
         c_betting_house = res["betting_house"]
         c_total_stake = res["total_stake"]
         c_num_picks = res["num_picks"]
-        c_stake_strategy = res["stake_strategy"]
+        selected_strategies = res["selected_strategies"]
 
-        total_markets = len(df_results)
-        value_bets = df_results[df_results["Decision"] == "VALUE BET"]
-        practical_value_bets = df_results[df_results["Decision"] == "PRACTICAL VALUE"]
-        safe_picks = df_results[df_results["Decision"] == "SAFE PICK"]
-        watchlist_markets = df_results[df_results["Decision"] == "WATCHLIST"]
-        no_bet_markets = df_results[df_results["Decision"] == "NO BET"]
-
-        num_value_bets = len(value_bets)
-        num_practical_value = len(practical_value_bets)
-        num_safe_picks = len(safe_picks)
-        num_watchlist = len(watchlist_markets)
-        num_no_bets = len(no_bet_markets)
-
-        best_adjusted_ev = df_results["Adjusted EV"].max() if total_markets > 0 else 0.0
-        best_safety_score = df_results["Safety Score"].max() if total_markets > 0 else 0.0
-
-        # Render Metrics in Spanish
-        st.subheader("📈 Motor de probabilidades y métricas en vivo")
-        
-        col_m1, col_m2, col_m3 = st.columns(3)
-        with col_m1:
-            st.metric("Apuestas con valor", num_value_bets + num_practical_value)
-            st.metric("Apuestas seguras", num_safe_picks)
-        with col_m2:
-            st.metric("Mercados a vigilar", num_watchlist)
-            st.metric("No apostar", num_no_bets)
-        with col_m3:
-            st.metric("Mejor EV ajustado", f"{best_adjusted_ev * 100:.2f}%" if total_markets > 0 else "N/A")
-            st.metric("Mejor Safety Score", f"{best_safety_score:.1f}" if total_markets > 0 else "N/A")
-
-        st.progress(min(1.0, max(0.0, (num_value_bets + num_practical_value + num_safe_picks) / max(1, total_markets))))
-
-        # Detailed Table in Spanish
-        st.subheader("📋 Tabla detallada de cálculos")
-        df_display = df_results.copy()
-        df_display["Estimated Probability"] = df_display["Estimated Probability"].apply(lambda x: f"{x*100:.1f}%")
-        df_display["Implied Probability"] = df_display["Implied Probability"].apply(lambda x: f"{x*100:.1f}%")
-        df_display["Edge"] = df_display["Edge"].apply(lambda x: f"{x*100:.1f}%")
-        df_display["Adjusted Probability"] = df_display["Adjusted Probability"].apply(lambda x: f"{x*100:.1f}%")
-        df_display["Simple EV"] = df_display["Simple EV"].apply(lambda x: f"{x*100:.1f}%")
-        df_display["Adjusted EV"] = df_display["Adjusted EV"].apply(lambda x: f"{x*100:.1f}%")
-        df_display["Recommended Stake"] = df_display["Recommended Stake"].apply(lambda x: f"{x:.2f} €")
-        df_display["Odds"] = df_display["Odds"].apply(lambda x: f"{x:.2f}")
-        df_display["Safety Score"] = df_display["Safety Score"].apply(lambda x: f"{x:.1f}")
-        df_display["Final Ranking Score"] = df_display["Final Ranking Score"].apply(lambda x: f"{x:.1f}")
-        
-        # Rename column headers
-        df_display.rename(columns={
-            "Market": "Mercado",
-            "Odds": "Cuota",
-            "Estimated Probability": "Probabilidad estimada",
-            "Implied Probability": "Probabilidad implícita",
-            "Edge": "Margen",
-            "Adjusted Probability": "Probabilidad ajustada",
-            "Simple EV": "EV simple",
-            "Adjusted EV": "EV ajustado",
-            "Risk Type": "Tipo de riesgo",
-            "Recommended Stake": "Importe recomendado",
-            "Decision": "Decisión",
-            "Safety Score": "Puntuación de seguridad",
-            "Final Ranking Score": "Puntuación de ranking"
-        }, inplace=True)
-
-        # Rename decision values for view
-        decision_map_es = {
-            "VALUE BET": "APUESTA CON VALOR ESTRICTO",
-            "PRACTICAL VALUE": "APUESTA CON VALOR PRÁCTICO",
-            "SAFE PICK": "APUESTA SEGURA",
-            "WATCHLIST": "MERCADOS A VIGILAR",
-            "NO BET": "NO APOSTAR"
-        }
-        df_display["Decisión"] = df_display["Decisión"].map(decision_map_es)
-        
-        st.dataframe(df_display, use_container_width=True)
-
-        # Sort lists by Final Ranking Score descending
-        value_bets_sorted = value_bets.sort_values(by="Final Ranking Score", ascending=False)
-        practical_value_sorted = practical_value_bets.sort_values(by="Final Ranking Score", ascending=False)
-        safe_picks_sorted = safe_picks.sort_values(by="Final Ranking Score", ascending=False)
-        watchlist_sorted = watchlist_markets.sort_values(by="Final Ranking Score", ascending=False)
-
-        # Traditional Model Output Section (Translated)
         st.markdown("---")
-        st.subheader("🏆 RESULTADO DETALLADO DEL MODELO (EV)")
-        
-        if num_value_bets > 0:
-            st.success(f"### APUESTA(S) CON VALOR ESTRICTO RECOMENDADA(S): {num_value_bets}")
-            
-            st.markdown("### APUESTAS CON VALOR ESTRICTO")
-            for idx, row in value_bets_sorted.iterrows():
-                st.markdown(f"""
-                <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #e63946; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                    <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #e63946;">{row['Market']}</span></h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                        <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                        <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                        <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                        <div><b>EV ajustado:</b> <span style="color: #00ff88; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                        <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                        <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                        <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                        <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                        <div><b>Decisión:</b> <span class="status-ok">VALOR ESTRICTO</span></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            if num_practical_value > 0:
-                st.markdown("### APUESTAS CON VALOR PRÁCTICO")
-                for idx, row in practical_value_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ff4d4d; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #ff4d4d;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #ffcc00; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span style="color: #00ff88; font-weight: bold;">VALOR PRÁCTICO</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            if num_safe_picks > 0:
-                st.markdown("### APUESTAS SEGURAS")
-                for idx, row in safe_picks_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ffcc00; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #ffcc00;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #ffcc00; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span class="status-warn">APUESTA SEGURA</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+        st.subheader("🏆 PLAN DE APUESTAS RECOMENDADO")
 
-            if num_watchlist > 0:
-                st.markdown("### MERCADOS A VIGILAR")
-                for idx, row in watchlist_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #a0aec0;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span style="color: #a0aec0; font-weight: bold;">MERCADO A VIGILAR</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        elif num_practical_value > 0:
-            st.warning("### NO SE ENCONTRARON APUESTAS CON VALOR ESTRICTO\n\nSin embargo, los siguientes mercados muestran un valor práctico positivo:")
-            
-            st.markdown("### APUESTAS CON VALOR PRÁCTICO")
-            for idx, row in practical_value_sorted.iterrows():
-                st.markdown(f"""
-                <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ff4d4d; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                    <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #ff4d4d;">{row['Market']}</span></h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                        <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                        <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                        <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                        <div><b>EV ajustado:</b> <span style="color: #00ff88; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                        <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                        <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                        <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                        <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                        <div><b>Decisión:</b> <span style="color: #00ff88; font-weight: bold;">VALOR PRÁCTICO</span></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            if num_safe_picks > 0:
-                st.markdown("### APUESTAS SEGURAS")
-                for idx, row in safe_picks_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ffcc00; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #ffcc00;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #ffcc00; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span class="status-warn">APUESTA SEGURA</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            if num_watchlist > 0:
-                st.markdown("### MERCADOS A VIGILAR")
-                for idx, row in watchlist_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #a0aec0;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span style="color: #a0aec0; font-weight: bold;">MERCADO A VIGILAR</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
-        elif num_safe_picks > 0:
-            st.warning("### NO SE ENCONTRARON APUESTAS CON VALOR\n\nSin embargo, las alternativas más seguras disponibles son:")
-            
-            for idx, row in safe_picks_sorted.iterrows():
-                st.markdown(f"""
-                <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ffcc00; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                    <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #ffcc00;">{row['Market']}</span></h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                        <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                        <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                        <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                        <div><b>EV ajustado:</b> <span style="color: #ffcc00; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                        <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                        <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                        <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                        <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                        <div><b>Decisión:</b> <span class="status-warn">APUESTA SEGURA</span></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            if num_watchlist > 0:
-                st.markdown("### MERCADOS A VIGILAR")
-                for idx, row in watchlist_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #a0aec0;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span style="color: #a0aec0; font-weight: bold;">MERCADO A VIGILAR</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
+        M = len(selected_recommendations)
+        if M == 0:
+            st.warning("No se pudieron generar apuestas simples o combinadas seguras con los filtros requeridos en el rango de cuota objetivo de 1.50 a 2.50. Intenta cambiar los parámetros.")
         else:
-            st.warning("### DECISIÓN FINAL: NO APOSTAR\n\n**Razón:** Ningún mercado superó los filtros de valor o seguridad.")
-            
-            if num_watchlist > 0:
-                st.markdown("### MERCADOS A VIGILAR")
-                for idx, row in watchlist_sorted.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #a0aec0; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                        <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 Mercado: <span style="color: #a0aec0;">{row['Market']}</span></h4>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{row['Odds']:.2f}</span></div>
-                            <div><b>Prob. estimada:</b> <span style="color: #ffffff;">{row['Estimated Probability']*100:.1f}%</span></div>
-                            <div><b>Prob. implícita:</b> <span style="color: #ffffff;">{row['Implied Probability']*100:.1f}%</span></div>
-                            <div><b>EV ajustado:</b> <span style="color: #a0aec0; font-weight: bold;">{row['Adjusted EV']*100:.2f}%</span></div>
-                            <div><b>Safety Score:</b> <span style="color: #ffffff;">{row['Safety Score']:.1f}</span></div>
-                            <div><b>Ranking Score:</b> <span style="color: #ffffff;">{row['Final Ranking Score']:.1f}</span></div>
-                            <div><b>Tipo de riesgo:</b> <span style="color: #ffffff;">{row['Risk Type']}</span></div>
-                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{row['Recommended Stake']:.2f} €</span></div>
-                            <div><b>Decisión:</b> <span style="color: #a0aec0; font-weight: bold;">MERCADO A VIGILAR</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        # Staking / Combination Plan Results Display ("Plan de Apuestas Recomendado" / "Resultado Final")
-        # --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-        st.markdown("---")
-        st.subheader("🏆 PLAN DE APUESTAS RECOMENDADO (RESULTADO FINAL)")
-        
-        if len(selected_recommendations) == 0:
-            st.warning("No se pudieron generar apuestas simples o combinadas seguras en el rango de cuota objetivo de 1.50 a 2.50. Intenta ampliar el rango de cuotas o cargar más datos.")
-        else:
-            st.markdown(f"**Mejor opción recomendada:** {c_stake_strategy}")
-            
-            for idx, rec in enumerate(selected_recommendations):
-                role = "Apuesta principal" if idx == 0 else f"Apuesta secundaria"
-                if idx > 1:
-                    role = f"Apuesta secundaria {idx}"
+            for strat_idx, strategy_str in enumerate(selected_strategies):
+                st.markdown(f"""
+                <div style="border-bottom: 2px solid #E30613; margin-top: 25px; margin-bottom: 15px; padding-bottom: 5px;">
+                    <h3 style="color: #ffffff; margin: 0;">Opción {strat_idx + 1} — Reparto {strategy_str}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                try:
+                    pcts = sorted([float(p.strip()) / 100.0 for p in strategy_str.split("/")], reverse=True)
+                except Exception:
+                    pcts = [1.0 / M] * M
                     
-                stake_val = rec_stakes[idx]
-                pot_return = stake_val * rec["odds"]
-                pot_profit = pot_return - stake_val
+                total_ret_opt = 0.0
+                total_prof_opt = 0.0
                 
-                # Format legs string
-                legs_html = ""
-                if rec["combined_bet"]:
-                    legs_details = "<br>".join([f"• {leg['market']} (@{leg['odds']:.2f})" for leg in rec["legs"]])
-                    legs_html = f"<div style='font-size: 13px; color: #a0aec0; margin-top: 5px; margin-bottom: 5px;'><b>Selecciones combinadas:</b><br>{legs_details}</div>"
-                
-                st.markdown(f"""
-                <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #ffcc00; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
-                    <h4 style="margin: 0 0 10px 0; color: #ffffff;">🎯 {role}: <span style="color: #ffcc00;">{rec['market']}</span></h4>
-                    {legs_html}
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0;">
-                        <div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
-                        <div><b>Probabilidad estimada:</b> <span style="color: #ffffff;">{rec['probability']:.1f}%</span></div>
-                        <div><b>Riesgo:</b> <span style="color: #ffffff;">{rec['risk']:.1f}%</span></div>
-                        <div><b>Incertidumbre:</b> <span style="color: #ffffff;">{rec['uncertainty']:.1f}%</span></div>
-                        <div><b>Safety Score:</b> <span style="color: #ffffff;">{rec['safety_score']:.1f}</span></div>
-                        <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
-                        <div><b>Retorno potencial:</b> <span style="color: #00ff88; font-weight: bold;">{pot_return:.2f} €</span></div>
-                        <div><b>Beneficio potencial:</b> <span style="color: #00ff88; font-weight: bold;">{pot_profit:.2f} €</span></div>
+                for idx, rec in enumerate(selected_recommendations):
+                    role = "Apuesta principal" if idx == 0 else f"Apuesta secundaria"
+                    if idx > 1:
+                        role = f"Apuesta secundaria {idx}"
+                        
+                    pct_val = pcts[idx] if idx < len(pcts) else 0.0
+                    stake_val = c_total_stake * pct_val
+                    pot_return = stake_val * rec["odds"]
+                    pot_profit = pot_return - stake_val
+                    
+                    total_ret_opt += pot_return
+                    total_prof_opt += pot_profit
+                    
+                    # Translate market to Spanish
+                    translated_market = translate_market_to_spanish(rec["market"])
+                    
+                    legs_html = ""
+                    if rec["combined_bet"]:
+                        role_text = "Apuesta combinada:"
+                        legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in rec["legs"]]
+                        legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+                    else:
+                        role_text = f"{role}:"
+                        legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{translated_market}</div>"
+
+                    st.markdown(f"""
+                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                        <div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">{role_text}</div>
+                        {legs_html}
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0; margin-top: 10px;">
+                            <div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
+                            <div><b>Probabilidad estimada:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0 if rec['probability'] < 1.0 else rec['probability']:.1f}%</span></div>
+                            <div><b>Importe:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
+                            <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
+                            <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+                        </div>
                     </div>
+                    """, unsafe_allow_html=True)
+                    
+                    is_saved = any(fav["market"] == rec["market"] and fav["match"] == c_match for fav in st.session_state.favorites)
+                    if is_saved:
+                        st.button("✓ Guardada en favoritas", key=f"save_fav_{strat_idx}_{idx}", disabled=True)
+                    else:
+                        if st.button("Guardar en favoritas", key=f"save_fav_{strat_idx}_{idx}"):
+                            new_fav = {
+                                "id": f"{int(time.time())}_{strat_idx}_{idx}",
+                                "date_saved": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "match": c_match,
+                                "competition": c_competition,
+                                "betting_house": c_betting_house,
+                                "market": rec["market"],
+                                "odds": float(rec["odds"]),
+                                "estimated_probability": float(rec["probability"]),
+                                "risk": float(rec["risk"]),
+                                "uncertainty": float(rec["uncertainty"]),
+                                "type": rec["type"],
+                                "stake": float(stake_val),
+                                "potential_return": float(pot_return),
+                                "potential_profit": float(pot_profit),
+                                "status": "Favorita",
+                                "combined_bet": rec["combined_bet"],
+                                "legs": rec["legs"]
+                            }
+                            st.session_state.favorites.append(new_fav)
+                            save_favorites()
+                            st.success(f"¡Apuesta guardada como favorita!")
+                            st.rerun()
+
+                st.markdown(f"""
+                <div style="background-color: #1a1e24; padding: 12px 18px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: bold; color: #ffffff;">Resumen Opción:</span>
+                    <span style="color: #a0aec0;">Importe total: <b style="color: #ffffff;">{c_total_stake:.2f} €</b></span>
+                    <span style="color: #a0aec0;">Retorno potencial total: <b style="color: #ffffff;">{total_ret_opt:.2f} €</b></span>
+                    <span style="color: #a0aec0;">Beneficio potencial total: <b style="color: #00C853;">{total_prof_opt:.2f} €</b></span>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Check if this favorite is already saved
-                is_saved = any(fav["market"] == rec["market"] and fav["match"] == c_match for fav in st.session_state.favorites)
-                
-                if is_saved:
-                    st.button("✓ Guardada en favoritas", key=f"save_fav_{idx}", disabled=True)
-                else:
-                    if st.button("Guardar en favoritas", key=f"save_fav_{idx}"):
-                        new_fav = {
-                            "id": f"{int(time.time())}_{idx}",
-                            "date_saved": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "match": c_match,
-                            "competition": c_competition,
-                            "betting_house": c_betting_house,
-                            "market": rec["market"],
-                            "odds": float(rec["odds"]),
-                            "estimated_probability": float(rec["probability"]),
-                            "risk": float(rec["risk"]),
-                            "uncertainty": float(rec["uncertainty"]),
-                            "type": rec["type"],
-                            "stake": float(stake_val),
-                            "potential_return": float(pot_return),
-                            "potential_profit": float(pot_profit),
-                            "status": "Pendiente",
-                            "combined_bet": rec["combined_bet"],
-                            "legs": rec["legs"]
-                        }
-                        st.session_state.favorites.append(new_fav)
-                        save_favorites()
-                        st.success(f"¡Apuesta guardada como favorita!")
-                        st.rerun()
+
+            # Final summary
+            if M == 2:
+                best_strat = "75 / 25"
+                motive = "Permite asignar una cantidad mayor a la apuesta principal (más probable) mientras se mantiene una cobertura moderada en la apuesta secundaria."
+            else: # M == 3
+                best_strat = "60 / 25 / 15"
+                motive = "Distribuye el capital de forma óptima en tres niveles de probabilidad, maximizando el retorno esperado sin sobreexponer el depósito."
+            
+            st.markdown(f"""
+            <div style="background-color: #12161a; padding: 20px; border-radius: 10px; border: 2px solid #ffd400; margin-top: 25px; margin-bottom: 20px;">
+                <h3 style="color: #ffd400; margin: 0 0 10px 0;">RESULTADO FINAL</h3>
+                <div style="font-size: 16px; color: #ffffff; margin-bottom: 5px;">
+                    <b>Mejor opción recomendada:</b> {best_strat}
+                </div>
+                <div style="font-size: 14px; color: #a0aec0;">
+                    <b>Motivo:</b> {motive}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         st.caption(
             "Nota: La calculadora estima los valores esperados en base a ajustes estadísticos. Los rendimientos pasados no garantizan resultados futuros."
         )
 
 # ----------------------------------------------------
-# TAB 2: BACKTESTING
-# ----------------------------------------------------
-# ----------------------------------------------------
 # TAB 2: FAVORITAS
 # ----------------------------------------------------
 with tab2:
-    st.header("📋 Mis Apuestas Favoritas")
-    
-    # Calculate metrics for closed bets
-    total_favs = len(st.session_state.favorites)
-    pendientes = sum(1 for f in st.session_state.favorites if f["status"] == "Pendiente")
-    ganadas = sum(1 for f in st.session_state.favorites if f["status"] == "Ganada")
-    perdidas = sum(1 for f in st.session_state.favorites if f["status"] == "Perdida")
-    nulas = sum(1 for f in st.session_state.favorites if f["status"] == "Nula")
-    
-    total_profit_closed = 0.0
-    total_stake_closed = 0.0
-    
-    for f in st.session_state.favorites:
-        st_val = float(f["stake"])
-        od_val = float(f["odds"])
-        status = f["status"]
-        if status == "Ganada":
-            total_profit_closed += st_val * (od_val - 1.0)
-            total_stake_closed += st_val
-        elif status == "Perdida":
-            total_profit_closed -= st_val
-            total_stake_closed += st_val
-        elif status == "Nula":
-            total_stake_closed += st_val
-            
-    roi_closed = (total_profit_closed / total_stake_closed * 100.0) if total_stake_closed > 0 else 0.0
-    
-    # Render metrics cards
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        st.metric("Apuestas guardadas", total_favs)
-        st.metric("Pendientes", pendientes)
-    with col_f2:
-        st.metric("Ganadas", ganadas)
-        st.metric("Perdidas", perdidas)
-    with col_f3:
-        st.metric("Beneficio total cerrado", f"{total_profit_closed:.2f} €", delta=f"{total_profit_closed:.2f} €")
-        st.metric("ROI cerrado", f"{roi_closed:.2f}%")
-        
-    st.markdown("---")
-    
-    if total_favs == 0:
-        st.info("No hay apuestas favoritas guardadas aún. Calcula apuestas y haz clic en 'Guardar en favoritas'.")
+    st.header("2. Apuestas favoritas")
+    if not st.session_state.favorites:
+        st.info("No tienes apuestas guardadas como favoritas. Haz clic en 'Guardar en favoritas' en los resultados para agregar una.")
     else:
-        # Loop through favorites and render them
         for idx, fav in enumerate(st.session_state.favorites):
-            legs_str = ""
+            fav_id = fav.get("id", f"fav_{idx}")
+            m_trans = translate_market_to_spanish(fav["market"])
+            
+            legs_html = ""
             if fav.get("combined_bet"):
-                legs_str = " | **Piernas:** " + ", ".join([f"{leg['market']} (@{leg['odds']:.2f})" for leg in fav.get("legs", [])])
+                legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in fav.get("legs", [])]
+                legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+            else:
+                legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
                 
-            # Render card
             st.markdown(f"""
-            <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; margin-bottom: 15px;">
-                <h4 style="margin: 0 0 5px 0; color: #ffffff;">🎯 Mercado: <span style="color: #ffcc00;">{fav['market']}</span></h4>
-                <div style="font-size: 13px; color: #a0aec0; margin-bottom: 10px;">
-                    <b>Partido:</b> {fav['match']} | <b>Competición:</b> {fav['competition']} | <b>Casa de apuestas:</b> {fav['betting_house']}{legs_str}
+            <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #ffd400; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
+                    <span>📅 Guardada: {fav.get('date_saved', '')}</span>
+                    <span style="color: #ffd400; font-weight: bold;">{fav.get('betting_house', '')}</span>
                 </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; font-size: 13px; color: #ffffff;">
-                    <div><b>Cuota:</b> {fav['odds']:.2f}</div>
-                    <div><b>Importe:</b> {fav['stake']:.2f} €</div>
-                    <div><b>Probabilidad:</b> {fav['estimated_probability']:.1f}%</div>
-                    <div><b>Retorno:</b> {fav['potential_return']:.2f} €</div>
-                    <div><b>Beneficio:</b> {fav['potential_profit']:.2f} €</div>
-                    <div><b>Estado actual:</b> <span style="color: #ff6b6b; font-weight: bold;">{fav['status']}</span></div>
+                <div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{fav.get('match', '')}</div>
+                <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{fav.get('competition', '')}</div>
+                {legs_html}
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
+                    <div>Cuota: <span style="color: #ffffff;">{fav['odds']:.2f}</span></div>
+                    <div>Probabilidad: <span style="color: #ffffff;">{fav['estimated_probability'] * 100.0 if fav['estimated_probability'] < 1.0 else fav['estimated_probability']:.1f}%</span></div>
+                    <div>Importe: <span style="color: #ffffff;">{fav['stake']:.2f} €</span></div>
+                    <div>Retorno: <span style="color: #ffffff;">{fav['potential_return']:.2f} €</span></div>
+                    <div>Beneficio: <span style="color: #00C853; font-weight: bold;">{fav['potential_profit']:.2f} €</span></div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-            # Inline controls
-            col_sel, col_del = st.columns([3, 1])
-            with col_sel:
-                status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
-                current_idx = status_options.index(fav["status"]) if fav["status"] in status_options else 0
-                new_status = st.selectbox(
-                    f"Actualizar estado",
-                    status_options,
-                    index=current_idx,
-                    key=f"status_fav_{fav['id']}_{idx}"
-                )
-                if new_status != fav["status"]:
-                    fav["status"] = new_status
-                    save_favorites()
-                    st.rerun()
-            with col_del:
-                st.write("")
-                st.write("")
-                if st.button("Eliminar", key=f"delete_fav_{fav['id']}_{idx}", use_container_width=True):
+            # Action buttons
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                if st.button("Marcar como realizada", key=f"realize_fav_{fav_id}_{idx}"):
+                    new_placed = {
+                        "id": f"port_{int(time.time())}_{fav_id}",
+                        "date_placed": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "match": fav["match"],
+                        "competition": fav.get("competition", ""),
+                        "betting_house": fav.get("betting_house", ""),
+                        "market": fav["market"],
+                        "odds": fav["odds"],
+                        "stake": fav["stake"],
+                        "status": "Pendiente",
+                        "profit": 0.0,
+                        "combined_bet": fav.get("combined_bet", False),
+                        "legs": fav.get("legs", [])
+                    }
+                    if "portfolio" not in st.session_state:
+                        st.session_state.portfolio = []
+                    st.session_state.portfolio.append(new_placed)
+                    save_portfolio()
+                    
+                    # Remove it from favorites
                     st.session_state.favorites.pop(idx)
                     save_favorites()
+                    st.success("¡Apuesta marcada como realizada y movida a la Cartera!")
                     st.rerun()
-                    
-        # Confirm delete all favorites
-        st.markdown("---")
-        if st.checkbox("Confirmar borrar todas las favoritas", key="confirm_delete_all_checkbox"):
-            if st.button("BORRAR TODAS LAS FAVORITAS", use_container_width=True):
-                st.session_state.favorites = []
-                save_favorites()
-                st.rerun()
+            with col_b2:
+                if st.button("Eliminar de favoritas", key=f"delete_fav_{fav_id}_{idx}"):
+                    st.session_state.favorites.pop(idx)
+                    save_favorites()
+                    st.success("¡Apuesta eliminada de favoritas!")
+                    st.rerun()
 
 # ----------------------------------------------------
 # TAB 3: TOP CUOTAS
 # ----------------------------------------------------
 with tab3:
-    st.header("🏆 Top cuotas")
-    st.markdown("""
-    Esta pestaña muestra los mejores mercados con cuotas superiores a 1.50 calculados en la pestaña Calculadora.
-    Filtros automáticos aplicados:
-    - Cuota >= 1.50
-    - Probabilidad >= 45%
-    - Riesgo <= 30%
-    - Incertidumbre <= 30%
-    """)
-    
-    if "latest_markets" not in st.session_state or not st.session_state.latest_markets:
-        st.info("Por favor, introduce un CSV y haz clic en 'Calcular apuestas' en la pestaña Calculadora para generar datos de mercados.")
-    else:
-        top_candidates = []
+    st.header("3. Top cuotas de mercados analizados")
+    if "latest_markets" in st.session_state and st.session_state.latest_markets:
+        markets_df_data = []
         for m in st.session_state.latest_markets:
-            if m["Odds"] >= 1.50 and m["Probability"] >= 45.0 and m["Risk"] <= 30.0 and m["Uncertainty"] <= 30.0:
-                top_candidates.append(m)
-                
-        if not top_candidates:
-            st.warning("No se encontraron mercados que cumplan con los filtros requeridos (Cuota >= 1.50, Probabilidad >= 45%, Riesgo <= 30%, Incertidumbre <= 30%).")
+            type_trans = {"Low": "Bajo", "Medium": "Medio", "High": "Alto"}.get(m["Type"], m["Type"])
+            markets_df_data.append({
+                "Partido": m["Match"],
+                "Casa de apuestas": m["BettingHouse"],
+                "Apuesta": translate_market_to_spanish(m["Market"]),
+                "Cuota": float(m["Odds"]),
+                "Probabilidad": f"{m['Probability']:.1f}%",
+                "Riesgo": f"{m['Risk']:.1f}%",
+                "Incertidumbre": f"{m['Uncertainty']:.1f}%",
+                "Tipo": type_trans,
+                "Seguridad": float(m["SafetyScore"])
+            })
+        df_display = pd.DataFrame(markets_df_data)
+        df_display = df_display.sort_values(by="Seguridad", ascending=False)
+        st.dataframe(df_display, use_container_width=True, hide_index=True)
+    else:
+        st.info("No se han cargado mercados aún. Sube un CSV y calcula las apuestas en la pestaña de Calculadora.")
+
+# ----------------------------------------------------
+# TAB 4: CARTERA
+# ----------------------------------------------------
+with tab4:
+    st.header("4. Cartera de apuestas")
+    
+    if "portfolio" not in st.session_state:
+        st.session_state.portfolio = []
+        
+    col_left, col_right = st.columns([2, 1])
+    
+    with col_left:
+        st.subheader("Historial de apuestas realizadas")
+        if not st.session_state.portfolio:
+            st.info("No tienes apuestas en tu cartera. Para añadir una apuesta, ve a la pestaña de 'Favoritas' y haz clic en 'Marcar como realizada'.")
         else:
-            # Sort:
-            # 1. highest estimated probability (descending)
-            # 2. highest Safety Score (descending)
-            # 3. odds closest to the target range 1.50 - 2.50 (ascending distance)
-            def top_sort_key(x):
-                odds = x["Odds"]
-                dist = 0.0
-                if odds > 2.50:
-                    dist = odds - 2.50
-                return (-x["Probability"], -x["SafetyScore"], dist)
-                
-            sorted_top = sorted(top_candidates, key=top_sort_key)
+            placed_bets = sorted(st.session_state.portfolio, key=lambda x: x.get("date_placed", ""), reverse=True)
             
-            import urllib.parse
-            for rank, item in enumerate(sorted_top, 1):
-                query = f"{item['BettingHouse']} {item['Match']} {item['Market']}"
-                encoded_query = urllib.parse.quote_plus(query)
-                search_url = f"https://www.google.com/search?q={encoded_query}"
+            for idx, bet in enumerate(placed_bets):
+                bet_id = bet.get("id", f"bet_{idx}")
+                m_trans = translate_market_to_spanish(bet["market"])
+                
+                legs_html = ""
+                if bet.get("combined_bet"):
+                    legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in bet.get("legs", [])]
+                    legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+                else:
+                    legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
+                
+                status_curr = bet.get("status", "Pendiente")
+                if status_curr == "Ganada":
+                    profit_color = "#00C853"
+                    profit_prefix = "+"
+                elif status_curr == "Perdida":
+                    profit_color = "#FF3B3B"
+                    profit_prefix = ""
+                else:
+                    profit_color = "#a0aec0"
+                    profit_prefix = ""
                 
                 st.markdown(f"""
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <span style="background-color: #e63946; color: #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">Ranking #{rank}</span>
-                        <span style="font-size: 13px; color: #a0aec0;">Casa de apuestas: <b>{item['BettingHouse']}</b></span>
+                <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
+                        <span>📅 Realizada: {bet.get('date_placed', '')}</span>
+                        <span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
                     </div>
-                    <h4 style="margin: 5px 0; color: #ffffff;">{item['Market']}</h4>
-                    <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">
-                        <b>Partido:</b> {item['Match']}
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; font-size: 13px; color: #ffffff; margin-bottom: 10px;">
-                        <div><b>Cuota:</b> {item['Odds']:.2f}</div>
-                        <div><b>Probabilidad:</b> {item['Probability']:.1f}%</div>
-                        <div><b>Riesgo:</b> {item['Risk']:.1f}%</div>
-                        <div><b>Incertidumbre:</b> {item['Uncertainty']:.1f}%</div>
-                        <div><b>Safety Score:</b> {item['SafetyScore']:.1f}</div>
-                    </div>
-                    <div style="font-size: 13px;">
-                        <a href="{search_url}" target="_blank" style="color: #ff6b6b; font-weight: bold; text-decoration: none;">🔍 Buscar en casa de apuestas</a>
+                    <div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{bet.get('match', '')}</div>
+                    <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{bet.get('competition', '')}</div>
+                    {legs_html}
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
+                        <div>Cuota: <span style="color: #ffffff;">{bet['odds']:.2f}</span></div>
+                        <div>Importe: <span style="color: #ffffff;">{bet['stake']:.2f} €</span></div>
+                        <div>Retorno: <span style="color: #ffffff;">{(bet['stake'] * bet['odds']):.2f} €</span></div>
+                        <div>Resultado: <span style="color: {profit_color}; font-weight: bold;">{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                ctrl_col1, ctrl_col2 = st.columns([3, 1])
+                with ctrl_col1:
+                    status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
+                    try:
+                        status_idx = status_options.index(status_curr)
+                    except ValueError:
+                        status_idx = 0
+                    
+                    new_status = st.selectbox(
+                        "Estado de la apuesta",
+                        status_options,
+                        index=status_idx,
+                        key=f"status_select_{bet_id}_{idx}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    if new_status != status_curr:
+                        for b in st.session_state.portfolio:
+                            if b.get("id") == bet_id:
+                                b["status"] = new_status
+                                if new_status == "Ganada":
+                                    b["profit"] = b["stake"] * (b["odds"] - 1.0)
+                                elif new_status == "Perdida":
+                                    b["profit"] = -b["stake"]
+                                else:
+                                    b["profit"] = 0.0
+                                break
+                        save_portfolio()
+                        st.rerun()
+                        
+                with ctrl_col2:
+                    if st.button("Eliminar", key=f"delete_port_{bet_id}_{idx}"):
+                        for b in st.session_state.portfolio:
+                            if b.get("id") == bet_id:
+                                st.session_state.portfolio.remove(b)
+                                break
+                        save_portfolio()
+                        st.rerun()
+                        
+    with col_right:
+        st.subheader("Resumen de rendimiento")
+        
+        total_bets = len(st.session_state.portfolio)
+        pending_bets = sum(1 for b in st.session_state.portfolio if b.get("status") == "Pendiente")
+        closed_bets = sum(1 for b in st.session_state.portfolio if b.get("status") in ["Ganada", "Perdida", "Nula"])
+        won_bets = sum(1 for b in st.session_state.portfolio if b.get("status") == "Ganada")
+        lost_bets = sum(1 for b in st.session_state.portfolio if b.get("status") == "Perdida")
+        
+        saldo_total = sum(b.get("profit", 0.0) for b in st.session_state.portfolio)
+        
+        total_closed_stake = sum(b.get("stake", 0.0) for b in st.session_state.portfolio if b.get("status") in ["Ganada", "Perdida", "Nula"])
+        total_closed_profit = sum(b.get("profit", 0.0) for b in st.session_state.portfolio if b.get("status") in ["Ganada", "Perdida", "Nula"])
+        
+        if total_closed_stake > 0:
+            roi_cerrado = (total_closed_profit / total_closed_stake) * 100.0
+        else:
+            roi_cerrado = 0.0
+            
+        if saldo_total > 0:
+            saldo_color = "#00C853"
+            saldo_sign = "+"
+        elif saldo_total < 0:
+            saldo_color = "#FF3B3B"
+            saldo_sign = ""
+        else:
+            saldo_color = "#ffffff"
+            saldo_sign = ""
+            
+        st.markdown(f"""
+        <div style="background-color: #12161a; padding: 25px; border-radius: 12px; border: 2px solid #262c35; text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: bold; color: #a0aec0; text-transform: uppercase; letter-spacing: 1px;">SALDO TOTAL</div>
+            <div style="font-size: 38px; font-weight: 800; color: {saldo_color}; margin-top: 10px;">{saldo_sign}{saldo_total:.2f} €</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Total Apuestas</div>
+                <div style="font-size: 20px; font-weight: bold; color: #ffffff; margin-top: 2px;">{total_bets}</div>
+            </div>
+            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Pendientes</div>
+                <div style="font-size: 20px; font-weight: bold; color: #ffd400; margin-top: 2px;">{pending_bets}</div>
+            </div>
+            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Ganadas</div>
+                <div style="font-size: 20px; font-weight: bold; color: #00C853; margin-top: 2px;">{won_bets}</div>
+            </div>
+            <div style="background-color: #12161a; padding: 12px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="font-size: 11px; color: #a0aec0; text-transform: uppercase;">Perdidas</div>
+                <div style="font-size: 20px; font-weight: bold; color: #ff3b30; margin-top: 2px;">{lost_bets}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if roi_cerrado > 0:
+            roi_color = "#00C853"
+            roi_sign = "+"
+        elif roi_cerrado < 0:
+            roi_color = "#FF3B3B"
+            roi_sign = ""
+        else:
+            roi_color = "#ffffff"
+            roi_sign = ""
+            
+        st.markdown(f"""
+        <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+            <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase; letter-spacing: 0.5px;">ROI Cerrado</div>
+            <div style="font-size: 24px; font-weight: bold; color: {roi_color}; margin-top: 5px;">{roi_sign}{roi_cerrado:.2f}%</div>
+            <div style="font-size: 11px; color: #718096; margin-top: 5px;">Basado en {closed_bets} apuestas finalizadas (Inversión: {total_closed_stake:.2f} €)</div>
+        </div>
+        """, unsafe_allow_html=True)

@@ -367,7 +367,7 @@ def render_altair_chart(df):
             strokeWidth=0
         ).configure_axis(
             grid=True,
-            gridColor='#262c35',
+            gridColor='#222222',
             labelColor='#a0aec0',
             titleColor='#ffffff'
         )
@@ -718,6 +718,19 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true
 </style>
 """, unsafe_allow_html=True)
 
+# 1.5. Dynamic sidebar visibility based on active section
+if st.session_state.get("current_section", "Inicio") == "Inicio":
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # 1. Page Intro Animation
 if "intro_seen" not in st.session_state:
     st.markdown("""
@@ -765,6 +778,10 @@ if "intro_seen" not in st.session_state:
 # 2. Calculate global metrics for the header
 portfolio = st.session_state.get("portfolio", [])
 metrics_glob = calculate_balance_metrics(portfolio)
+
+bal_val = metrics_glob["saldo_total"]
+bal_sign = "+" if bal_val > 0 else ""
+bal_color = "#00C853" if bal_val > 0 else ("#FF3B3B" if bal_val < 0 else "#ffffff")
 
 # 3. Top Right User Box Layout (Clickable balance text)
 col_empty, col_user = st.columns([3, 1.5])
@@ -918,7 +935,6 @@ def clean_match_name(text):
 # SECCIÓN: INICIO
 # ----------------------------------------------------
 if section == "Inicio":
-    st.subheader("Panel de control")
     col_h1, col_h2, col_h3, col_h4 = st.columns(4)
     with col_h1:
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
@@ -961,7 +977,7 @@ if section == "Inicio":
 
     with col_h4:
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
-        if st.button("Historial de partidos", key="h_btn_hist"):
+        if st.button("Historial de partidos estudiados", key="h_btn_hist"):
             st.session_state.current_section = "Historial de partidos estudiados"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -1637,7 +1653,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                     rel_text = get_probability_benefit_relation(rec["probability"], rec["odds"])
 
                     st.markdown(f"""
-                    <div style="background-color: #12161a; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                    <div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
                         <div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">{role_text}</div>
                         {legs_html}
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0; margin-top: 10px;">
@@ -1682,7 +1698,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                             st.rerun()
 
                 st.markdown(f"""
-                <div style="background-color: #1a1e24; padding: 12px 18px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="background-color: #111111; padding: 12px 18px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: bold; color: #ffffff;">Resumen Reparto:</span>
                     <span style="color: #a0aec0;">Importe total: <b style="color: #ffffff;">{c_total_stake:.2f} €</b></span>
                     <span style="color: #a0aec0;">Retorno potencial total: <b style="color: #ffffff;">{total_ret_opt:.2f} €</b></span>
@@ -1699,7 +1715,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 motive = "Distribuye el capital de forma óptima en tres niveles de probabilidad, maximizando el retorno esperado sin sobreexponer el depósito."
             
             st.markdown(f"""
-            <div style="background-color: #12161a; padding: 20px; border-radius: 10px; border: 2px solid #ffd400; margin-top: 25px; margin-bottom: 20px;">
+            <div style="background-color: #111111; padding: 20px; border-radius: 10px; border: 2px solid #ffd400; margin-top: 25px; margin-bottom: 20px;">
                 <h3 style="color: #ffd400; margin: 0 0 10px 0;">RESULTADO FINAL</h3>
                 <div style="font-size: 16px; color: #ffffff; margin-bottom: 5px;">
                     <b>Mejor reparto recomendado:</b> Reparto {best_strat}
@@ -1738,7 +1754,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                     legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
                 
                 st.markdown(f"""
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd400; margin-bottom: 12px; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd400; margin-bottom: 12px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
                     {legs_html}
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; font-size: 13px; color: #a0aec0; margin-top: 5px;">
                         <div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
@@ -1774,7 +1790,7 @@ elif section == "Favoritas":
                 
             fav_rel = get_probability_benefit_relation(fav["estimated_probability"], fav["odds"])
             st.markdown(f"""
-            <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #ffd400; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+            <div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #ffd400; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
                     <span>Guardada: {fav.get('date_saved', '')}</span>
                     <span style="color: #ffd400; font-weight: bold;">{fav.get('betting_house', '')}</span>
@@ -2113,7 +2129,7 @@ elif section == "Cartera":
                 profit_prefix = ""
                 
             st.markdown(f"""
-            <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+            <div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
                     <span>Realizada: {bet.get('date_placed', '')}</span>
                     <span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
@@ -2202,19 +2218,19 @@ elif section == "Estadísticas del modelo":
             st.subheader("Resumen de actividad")
             st.markdown(f"""
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center;">
                     <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Apuestas registradas</div>
                     <div style="font-size: 28px; font-weight: bold; color: #ffffff; margin-top: 5px;">{total_bets}</div>
                 </div>
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center;">
                     <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Apuestas finalizadas</div>
                     <div style="font-size: 28px; font-weight: bold; color: #ffffff; margin-top: 5px;">{closed_bets}</div>
                 </div>
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center;">
                     <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Apuestas pendientes</div>
                     <div style="font-size: 28px; font-weight: bold; color: #ffd400; margin-top: 5px;">{pending_bets}</div>
                 </div>
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center;">
                     <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Tasa de acierto</div>
                     <div style="font-size: 28px; font-weight: bold; color: {'#00C853' if win_rate >= 50 else '#FF3B3B'}; margin-top: 5px;">{win_rate:.1f}%</div>
                 </div>
@@ -2231,21 +2247,21 @@ elif section == "Estadísticas del modelo":
             
             st.markdown(f"""
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center;">
                     <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Capital invertido</div>
                     <div style="font-size: 24px; font-weight: bold; color: #ffffff; margin-top: 5px;">{total_closed_stake:.2f} €</div>
                 </div>
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center;">
                     <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Capital retornado</div>
                     <div style="font-size: 24px; font-weight: bold; color: #ffffff; margin-top: 5px;">{total_returned:.2f} €</div>
                 </div>
-                <div style="background-color: #12161a; padding: 15px; border-radius: 8px; border: 1px solid #262c35; text-align: center; grid-column: span 2;">
+                <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; text-align: center; grid-column: span 2;">
                     <div style="display: flex; justify-content: space-around; align-items: center; height: 100%;">
                         <div>
                             <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Resultado neto</div>
                             <div style="font-size: 24px; font-weight: bold; color: {profit_color}; margin-top: 5px;">{profit_sign}{total_profit:.2f} €</div>
                         </div>
-                        <div style="border-left: 1px solid #262c35; height: 40px;"></div>
+                        <div style="border-left: 1px solid #222222; height: 40px;"></div>
                         <div>
                             <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">ROI total</div>
                             <div style="font-size: 24px; font-weight: bold; color: {roi_color}; margin-top: 5px;">{roi_sign}{roi:.2f}%</div>
@@ -2352,7 +2368,7 @@ elif section == "Estadísticas del modelo":
 elif section == "Asistente manual":
     st.markdown('<div class="big-title">ASISTENTE MANUAL</div>', unsafe_allow_html=True)
     st.markdown("""
-    <div style="background-color: #12161a; padding: 20px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; font-size: 14px; color: #ffffff;">
+    <div style="background-color: #111111; padding: 20px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; font-size: 14px; color: #ffffff;">
         El Asistente manual prepara automáticamente los textos que necesitas para analizar partidos o actualizar resultados. La aplicación genera el prompt exacto, tú lo envías a tu asistente de IA y después pegas el CSV recibido para actualizar la calculadora, la cartera y las estadísticas.
         <br><br>
         <b>Pasos a seguir:</b>
@@ -2740,7 +2756,7 @@ CSV rules:
 elif section == "Historial de partidos estudiados":
     st.markdown('<div class="big-title">HISTORIAL DE PARTIDOS ESTUDIADOS</div>', unsafe_allow_html=True)
     st.markdown("""
-    <div style="background-color: #12161a; padding: 12px; border-radius: 6px; border: 1px solid #ffd400; margin-bottom: 20px; font-size: 13px; color: #ffffff;">
+    <div style="background-color: #111111; padding: 12px; border-radius: 6px; border: 1px solid #ffd400; margin-bottom: 20px; font-size: 13px; color: #ffffff;">
         <b>Nota de cuotas:</b> Las cuotas guardadas pertenecen al último análisis realizado. Para actualizar la información del partido, vuelve a generar el prompt y pega un nuevo CSV.
     </div>
     """, unsafe_allow_html=True)
@@ -2767,7 +2783,7 @@ elif section == "Historial de partidos estudiados":
                 recs_text = "Sin recomendaciones previas"
                 
             st.markdown(f"""
-            <div style="background-color: #12161a; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #E30613; border-top: 1px solid #262c35; border-right: 1px solid #262c35; border-bottom: 1px solid #262c35; margin-top: 15px;">
+            <div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #E30613; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
                 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
                     <span>Último análisis: {last_up}</span>
                     <span style="color: #E30613; font-weight: bold;">{house}</span>

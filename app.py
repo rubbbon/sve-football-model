@@ -207,6 +207,69 @@ tab1, tab2 = st.tabs(["📈 Live Model", "📊 Backtesting"])
 # TAB 1: LIVE MODEL
 # ----------------------------------------------------
 with tab1:
+    st.header("🔍 AI Research Prompt Generator")
+    
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        prompt_match = st.text_input("Match", "Spain vs France", key="prompt_match_input")
+        prompt_competition = st.text_input("Competition", "FIFA World Cup", key="prompt_comp_input")
+        prompt_phase = st.selectbox("Phase", ["Group", "Knockout", "Semifinal", "Final"], key="prompt_phase_input")
+    with col_p2:
+        prompt_house = st.text_input("Betting house preference", "Winamax", key="prompt_house_input")
+        prompt_markets = st.text_area(
+            "Markets to analyze",
+            value="1X2, corners, cards, goals, both teams to score, handicaps, shots",
+            height=125,
+            key="prompt_markets_input"
+        )
+    
+    prompt_text = f"""Please search current information about the football match "{prompt_match}" in the "{prompt_competition}" ({prompt_phase} phase).
+Review odds, lineups, injuries, suspensions, recent form, FIFA ranking or Elo, tactical context, referee if available, corners, cards, goals and shots. Use "{prompt_house}" as the betting house preference if possible.
+
+Based on your research and analysis, estimate probabilities for the following markets: {prompt_markets}
+
+You must return ONLY a CSV with exactly these columns:
+Market,Odds,Probability,Risk,Uncertainty,Type
+
+CSV rules:
+- Odds must be in decimal format.
+- Probability must be a number from 0 to 100.
+- Risk must be a number from 0 to 100.
+- Uncertainty must be a number from 0 to 100.
+- Type must be Low, Medium or High.
+- Do not include explanations outside the CSV.
+- Do not include markdown code fences.
+- Do not include markets without odds.
+- If data is missing, increase uncertainty.
+- Do not force bets.
+- Only include markets with realistic potential value.
+
+Here is the model formula for context:
+EV* = [(Estimated Probability − λ × Uncertainty − ρ × Risk) × Odds] − 1
+
+Please be conservative with:
+- finals,
+- knockout matches,
+- low odds favorites,
+- aggressive handicaps,
+- under bets based only on defensive style,
+- cards totals without referee information."""
+
+    st.text_area(
+        "Generated AI Research Prompt",
+        value=prompt_text,
+        height=350,
+        key="generated_prompt_area"
+    )
+    
+    st.markdown(
+        '<p style="font-size: 13px; color: #a0aec0; margin-top: -10px; margin-bottom: 25px;">'
+        '“Copy this prompt, send it to your AI assistant, then paste the returned CSV into the market input box below.”'
+        '</p>',
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
     st.header("1. Parameters & Configurations")
 
     # Inputs organized in 3 columns

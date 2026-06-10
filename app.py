@@ -284,6 +284,111 @@ Please be conservative with:
         key="generated_prompt_area"
     )
     
+    # JavaScript copy-to-clipboard component
+    import json
+    import streamlit.components.v1 as components
+    
+    escaped_prompt = json.dumps(st.session_state.generated_prompt)
+    
+    copy_button_html = f"""
+    <style>
+    body {{
+        margin: 0;
+        padding: 0;
+        background-color: transparent;
+        overflow: hidden;
+    }}
+    button {{
+        background-color: #e63946;
+        color: #ffffff;
+        border: 2px solid #ff6b6b;
+        border-radius: 8px;
+        font-weight: 700;
+        padding: 0.6rem 2.5rem;
+        transition: all 0.3s ease;
+        width: 100%;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-family: sans-serif;
+        cursor: pointer;
+    }}
+    button:hover {{
+        background-color: #ffffff !important;
+        color: #e63946 !important;
+        border-color: #ffffff !important;
+        box-shadow: 0 0 15px rgba(230, 57, 70, 0.4) !important;
+    }}
+    </style>
+    <button id="copy-btn">COPY AI PROMPT</button>
+    <div id="status" style="
+        color: #00ff88;
+        font-weight: bold;
+        font-family: sans-serif;
+        margin-top: 8px;
+        font-size: 14px;
+        text-align: center;
+        display: none;
+    ">✓ Prompt copied to clipboard</div>
+    
+    <script>
+    document.getElementById('copy-btn').addEventListener('click', function() {{
+        const text = {escaped_prompt};
+        if (!text) {{
+            const status = document.getElementById('status');
+            status.innerText = "✕ No prompt generated yet";
+            status.style.color = "#ff3b30";
+            status.style.display = "block";
+            setTimeout(() => {{ status.style.display = "none"; }}, 3000);
+            return;
+        }}
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {{
+            navigator.clipboard.writeText(text).then(showSuccess).catch(fallbackCopy);
+        }} else {{
+            fallbackCopy();
+        }}
+        
+        function fallbackCopy() {{
+            try {{
+                const el = document.createElement('textarea');
+                el.value = text;
+                el.setAttribute('readonly', '');
+                el.style.position = 'absolute';
+                el.style.left = '-9999px';
+                document.body.appendChild(el);
+                el.select();
+                const success = document.execCommand('copy');
+                document.body.removeChild(el);
+                if (success) {{
+                    showSuccess();
+                }} else {{
+                    showError();
+                }}
+            }} catch (err) {{
+                showError();
+            }}
+        }}
+        
+        function showSuccess() {{
+            const status = document.getElementById('status');
+            status.innerText = "✓ Prompt copied to clipboard";
+            status.style.color = "#00ff88";
+            status.style.display = "block";
+            setTimeout(() => {{ status.style.display = "none"; }}, 3000);
+        }}
+        
+        function showError() {{
+            const status = document.getElementById('status');
+            status.innerText = "✕ Copy failed. Please select and copy manually.";
+            status.style.color = "#ff3b30";
+            status.style.display = "block";
+            setTimeout(() => {{ status.style.display = "none"; }}, 5000);
+        }}
+    }});
+    </script>
+    """
+    components.html(copy_button_html, height=75)
+    
     st.markdown(
         '<p style="font-size: 13px; color: #a0aec0; margin-top: -10px; margin-bottom: 25px;">'
         '“Click the button after editing the match details. Then copy the generated prompt and send it to your AI assistant.”'

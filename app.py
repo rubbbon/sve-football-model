@@ -962,8 +962,26 @@ if "intro_seen" not in st.session_state:
     st.session_state.intro_seen = True
     st.rerun()
 
+def get_current_balance_safe():
+    try:
+        if "metrics_glob" in globals() and isinstance(metrics_glob, dict):
+            return float(metrics_glob.get("saldo_total", 0))
+    except Exception:
+        pass
+
+    try:
+        if "calculate_balance_metrics" in globals():
+            portfolio = st.session_state.get("portfolio", [])
+            metrics = calculate_balance_metrics(portfolio)
+            if isinstance(metrics, dict):
+                return float(metrics.get("saldo_total", 0))
+    except Exception:
+        pass
+
+    return 0.0
+
 # 2. Calculate balance display and colors
-current_balance = metrics_glob["saldo_total"]
+current_balance = get_current_balance_safe()
 if current_balance > 0:
     balance_amount = f"+{current_balance:.2f} €"
     balance_color = "#00C853"

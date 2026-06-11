@@ -982,12 +982,10 @@ if st.button(f"Saldo: {bal_sign}{bal_val:.2f} €", key="top_clickable_balance_b
 
 # 4. Main Title Section (Centered on Inicio, Left-aligned on others)
 if st.session_state.current_section == "Inicio":
-    st.markdown("""
-    <div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
-        <div class="big-title" style="font-size: 44px; margin-bottom: 10px;">CALCULADORA DE APUESTAS</div>
-        <div class="subtitle" style="font-size: 18px; color: #a0aec0;">Plataforma de análisis, gestión y seguimiento de apuestas</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
+<div class="big-title" style="font-size: 44px; margin-bottom: 10px;">CALCULADORA DE APUESTAS</div>
+<div class="subtitle" style="font-size: 18px; color: #a0aec0;">Plataforma de análisis, gestión y seguimiento de apuestas</div>
+</div>""", unsafe_allow_html=True)
 else:
     st.markdown('<div class="big-title">CALCULADORA DE APUESTAS</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Plataforma de análisis, gestión y seguimiento de apuestas</div>', unsafe_allow_html=True)
@@ -996,14 +994,10 @@ else:
 SECTIONS = [
     "Inicio",
     "Calculadora",
-    "Favoritas",
-    "Top cuotas",
-    "Cartera",
-    "Estadísticas del modelo",
-    "Asistente manual",
     "Analizar apuesta",
-    "Historial de partidos estudiados",
-    "Evolución del saldo"
+    "Cartera",
+    "Favoritas",
+    "Evolución del saldo",
 ]
 
 if "current_section" not in st.session_state:
@@ -1096,7 +1090,7 @@ def clean_match_name(text):
 # SECCIÓN: INICIO
 # ----------------------------------------------------
 if section == "Inicio":
-    col_h1, col_h2, col_h3 = st.columns(3)
+    col_h1, col_h2 = st.columns(2)
     with col_h1:
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
         if st.button("Calculadora", key="h_btn_calc"):
@@ -1104,40 +1098,19 @@ if section == "Inicio":
         st.markdown('</div>', unsafe_allow_html=True)
         
         st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
-        if st.button("Favoritas", key="h_btn_fav"):
-            navigate_to_section("Favoritas")
+        if st.button("Analizar apuesta", key="h_btn_quick"):
+            navigate_to_section("Analizar apuesta")
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
-        if st.button("Top cuotas", key="h_btn_top"):
-            navigate_to_section("Top cuotas")
+        if st.button("Favoritas", key="h_btn_fav"):
+            navigate_to_section("Favoritas")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_h2:
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
         if st.button("Cartera", key="h_btn_cart"):
             navigate_to_section("Cartera")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
-        if st.button("Estadísticas del modelo", key="h_btn_est"):
-            navigate_to_section("Estadísticas del modelo")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
-        if st.button("Asistente manual", key="h_btn_asis"):
-            navigate_to_section("Asistente manual")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_h3:
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
-        if st.button("Analizar apuesta", key="h_btn_quick"):
-            navigate_to_section("Analizar apuesta")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
-        if st.button("Historial de partidos estudiados", key="h_btn_hist"):
-            navigate_to_section("Historial de partidos estudiados")
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
@@ -1488,8 +1461,8 @@ Please be conservative with:
 
     st.header("2. Parámetros y configuración")
 
-    # Inputs organized in 3 columns
-    col1, col2, col3 = st.columns(3)
+    # Inputs organized in 2 columns
+    col1, col2 = st.columns(2)
     
     with col1:
         match = st.text_input("Partido", placeholder="Ejemplo: España vs Cabo Verde", key="config_match")
@@ -1539,12 +1512,12 @@ Please be conservative with:
             key="config_stake_strategies"
         )
 
-    with col3:
-        reliability = st.selectbox("Fiabilidad de los datos", ["Alta", "Media", "Baja"], key="config_reliability")
-        model_mode = st.selectbox("Modo del modelo", ["Conservador", "Equilibrado", "Agresivo"], key="config_model_mode")
-        cuota_minima = st.number_input("Cuota mínima objetivo", min_value=1.01, value=st.session_state.config_cuota_minima, step=0.01)
-        cuota_maxima = st.number_input("Cuota máxima objetivo", min_value=1.01, value=st.session_state.config_cuota_maxima, step=0.01)
-        allow_combined = st.checkbox("Permitir combinadas", value=st.session_state.config_allow_combined)
+    # Defaults for internal logic (hidden from UI)
+    reliability = "Media"
+    model_mode = "Equilibrado"
+    cuota_minima = 1.50
+    cuota_maxima = 2.50
+    allow_combined = True
 
     st.header("3. Entrada CSV de mercados")
     st.markdown("""
@@ -1940,20 +1913,19 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
  
                     rel_text = get_probability_benefit_relation(rec["probability"], rec["odds"])
  
-                    st.markdown(f"""
-                    <div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
-                        <div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">{role_text}</div>
-                        {legs_html}
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0; margin-top: 10px;">
-                            <div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
-                            <div><b>Probabilidad de éxito:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0 if rec['probability'] < 1.0 else rec['probability']:.1f}%</span></div>
-                            <div><b>Importe apostado:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
-                            <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
-                            <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
-                            <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400;">{rel_text}</span></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    html_rec = f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
+<div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">{role_text}</div>
+{legs_html}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0; margin-top: 10px;">
+<div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
+<div><b>Probabilidad de éxito:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0 if rec['probability'] < 1.0 else rec['probability']:.1f}%</span></div>
+<div><b>Importe apostado:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
+<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
+<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+<div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400;">{rel_text}</span></div>
+</div>
+</div>"""
+                    st.markdown(html_rec, unsafe_allow_html=True)
                     
                     is_saved = any(fav["market"] == rec["market"] and fav["match"] == c_match for fav in st.session_state.favorites)
                     if is_saved:
@@ -2080,25 +2052,23 @@ elif section == "Favoritas":
                 legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
                 
             fav_rel = get_probability_benefit_relation(fav["estimated_probability"], fav["odds"])
-            st.markdown(f"""
-            <div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #ffd400; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
-                    <span>Guardada: {fav.get('date_saved', '')}</span>
-                    <span style="color: #ffd400; font-weight: bold;">{fav.get('betting_house', '')}</span>
-                </div>
-                <div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{fav.get('match', '')}</div>
-                <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{fav.get('competition', '')}</div>
-                {legs_html}
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
-                    <div>Cuota: <span style="color: #ffffff;">{fav['odds']:.2f}</span></div>
-                    <div>Probabilidad de éxito: <span style="color: #ffffff;">{fav['estimated_probability'] * 100.0 if fav['estimated_probability'] < 1.0 else fav['estimated_probability']:.1f}%</span></div>
-                    <div>Importe apostado: <span style="color: #ffffff;">{fav['stake']:.2f} €</span></div>
-                    <div>Retorno potencial: <span style="color: #ffffff;">{fav['potential_return']:.2f} €</span></div>
-                    <div>Beneficio potencial: <span style="color: #00C853; font-weight: bold;">{fav['potential_profit']:.2f} €</span></div>
-                    <div style="grid-column: span 2;"><b>Relación:</b> <span style="color: #ffd400;">{fav_rel}</span></div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid #ffd400; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
+<span>Guardada: {fav.get('date_saved', '')}</span>
+<span style="color: #ffd400; font-weight: bold;">{fav.get('betting_house', '')}</span>
+</div>
+<div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{fav.get('match', '')}</div>
+<div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{fav.get('competition', '')}</div>
+{legs_html}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
+<div>Cuota: <span style="color: #ffffff;">{fav['odds']:.2f}</span></div>
+<div>Probabilidad de éxito: <span style="color: #ffffff;">{fav['estimated_probability'] * 100.0 if fav['estimated_probability'] < 1.0 else fav['estimated_probability']:.1f}%</span></div>
+<div>Importe apostado: <span style="color: #ffffff;">{fav['stake']:.2f} €</span></div>
+<div>Retorno potencial: <span style="color: #ffffff;">{fav['potential_return']:.2f} €</span></div>
+<div>Beneficio potencial: <span style="color: #00C853; font-weight: bold;">{fav['potential_profit']:.2f} €</span></div>
+<div style="grid-column: span 2;"><b>Relación:</b> <span style="color: #ffd400;">{fav_rel}</span></div>
+</div>
+</div>""", unsafe_allow_html=True)
             
             # Action buttons
             col_b1, col_b2 = st.columns(2)
@@ -2178,30 +2148,24 @@ elif section == "Cartera":
     
     col_g1, col_g2, col_g3 = st.columns(3)
     with col_g1:
-        st.markdown(f"""
-        <div class="metric-box">
-            <div class="metric-label">DINERO INVERTIDO</div>
-            <div class="metric-value">{metrics_glob["dinero_invertido"]:.2f} €</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-box">
+<div class="metric-label">DINERO INVERTIDO</div>
+<div class="metric-value">{metrics_glob["dinero_invertido"]:.2f} €</div>
+</div>""", unsafe_allow_html=True)
     with col_g2:
         prof_color = "#00C853" if metrics_glob["beneficio_obtenido"] >= 0 else "#FF3B3B"
         prof_sign = "+" if metrics_glob["beneficio_obtenido"] > 0 else ""
-        st.markdown(f"""
-        <div class="metric-box">
-            <div class="metric-label">BENEFICIO OBTENIDO</div>
-            <div class="metric-value" style="color: {prof_color};">{prof_sign}{metrics_glob["beneficio_obtenido"]:.2f} €</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-box">
+<div class="metric-label">BENEFICIO OBTENIDO</div>
+<div class="metric-value" style="color: {prof_color};">{prof_sign}{metrics_glob["beneficio_obtenido"]:.2f} €</div>
+</div>""", unsafe_allow_html=True)
     with col_g3:
         roi_color = "#00C853" if metrics_glob["roi_cerrado"] >= 0 else "#FF3B3B"
         roi_sign = "+" if metrics_glob["roi_cerrado"] > 0 else ""
-        st.markdown(f"""
-        <div class="metric-box">
-            <div class="metric-label">ROI CERRADO</div>
-            <div class="metric-value" style="color: {roi_color};">{roi_sign}{metrics_glob["roi_cerrado"]:.2f}%</div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div class="metric-box">
+<div class="metric-label">ROI CERRADO</div>
+<div class="metric-value" style="color: {roi_color};">{roi_sign}{metrics_glob["roi_cerrado"]:.2f}%</div>
+</div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     col_g4, col_g5, col_g6, col_g7, col_g8, col_g9 = st.columns(6)
@@ -2419,23 +2383,21 @@ elif section == "Cartera":
                 profit_color = "#a0aec0"
                 profit_prefix = ""
                 
-            st.markdown(f"""
-            <div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
-                    <span>Realizada: {bet.get('date_placed', '')}</span>
-                    <span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
-                </div>
-                <div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{bet.get('match', '')}</div>
-                <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{bet.get('competition', '')}</div>
-                {legs_html}
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
-                    <div>Cuota: <span style="color: #ffffff;">{bet['odds']:.2f}</span></div>
-                    <div>Importe apostado: <span style="color: #ffffff;">{bet['stake']:.2f} €</span></div>
-                    <div>Retorno potencial: <span style="color: #ffffff;">{(bet['stake'] * bet['odds']):.2f} €</span></div>
-                    <div>Resultado: <span style="color: {profit_color}; font-weight: bold;">{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
+<span>Realizada: {bet.get('date_placed', '')}</span>
+<span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
+</div>
+<div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{bet.get('match', '')}</div>
+<div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{bet.get('competition', '')}</div>
+{legs_html}
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
+<div>Cuota: <span style="color: #ffffff;">{bet['odds']:.2f}</span></div>
+<div>Importe apostado: <span style="color: #ffffff;">{bet['stake']:.2f} €</span></div>
+<div>Retorno potencial: <span style="color: #ffffff;">{(bet['stake'] * bet['odds']):.2f} €</span></div>
+<div>Resultado: <span style="color: {profit_color}; font-weight: bold;">{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>
+</div>
+</div>""", unsafe_allow_html=True)
             
             ctrl_col1, ctrl_col2 = st.columns([3, 1])
             with ctrl_col1:
@@ -3186,29 +3148,19 @@ elif section == "Analizar apuesta":
     # Large text area
     natural_input = st.text_area(
         "Escribe tu apuesta",
-        placeholder="Ejemplo: España gana a Cabo Verde cuota 2\nEjemplo: España queda primera de grupo cuota 2, 10 euros en Winamax\nEjemplo: Cabo Verde más de 1.5 tarjetas cuota 1.75",
+        placeholder="Ejemplo: España gana a Cabo Verde cuota 2\nEjemplo: España queda primera de grupo cuota 2, 10 euros\nEjemplo: Cabo Verde más de 1.5 tarjetas cuota 1.75",
         height=150,
         key="quick_bet_text_input"
     )
 
-    # Optional Screenshot Uploader
-    uploaded_file = st.file_uploader(
-        "Subir captura de la apuesta (opcional)",
-        type=["png", "jpg", "jpeg"],
-        key="quick_bet_file_upload"
-    )
-    if uploaded_file is not None:
-        st.image(uploaded_file, caption="Vista previa de la captura")
-        st.info("Captura añadida como referencia. Para mayor precisión, escribe también la apuesta en el cuadro de texto.")
-
     # Analyze Button
-    if st.button("ANALIZAR APUESTA", use_container_width=True, key="quick_bet_analyze_btn"):
+    if st.button("ANALIZAR", use_container_width=True, key="quick_bet_analyze_btn"):
         if not natural_input.strip():
             st.error("Por favor, escribe los detalles de la apuesta antes de analizar.")
         else:
             parsed = parse_natural_bet(natural_input)
             st.session_state.quick_bet_parsed = parsed
-            
+
     # Display parsed and analyzed results if available
     if "quick_bet_parsed" in st.session_state and st.session_state.quick_bet_parsed is not None:
         parsed = st.session_state.quick_bet_parsed
@@ -3223,119 +3175,91 @@ elif section == "Analizar apuesta":
 
         if not odds or odds <= 1.0:
             st.warning("No se pudo detectar una cuota válida en el texto (por ejemplo, 'cuota 2' o '@2.00'). Por favor, especifica la cuota para poder completar el análisis.")
-            # Number input to fallback
             odds = st.number_input("Cuota corregida", min_value=1.01, value=2.00, step=0.01, format="%.2f", key="quick_odds_fallback")
             parsed["odds"] = odds
             st.session_state.quick_bet_parsed = parsed
 
         if odds and odds > 1.0:
-            # Calculation logic (PART 6)
-            implied_prob = 1.0 / odds
-            est_prob_decimal = implied_prob * 0.94
+            # Simple probability logic
+            est_prob_decimal = (1.0 / odds) * 0.94
             est_prob_pct = est_prob_decimal * 100.0
             
-            # Risk estimation based on keywords and name
-            bet_type_lower = bet_type.lower()
-            bet_name_lower = bet_name.lower()
-            
-            is_low_risk = any(k in bet_name_lower or k in bet_type_lower for k in [
-                "doble op", "doble oportunidad", "double chance", "o empate", "or draw",
-                "empate no valido", "draw no bet", "empate no sirve",
-                "menos de 3.5", "under 3.5", "menos de 4.5", "under 4.5"
-            ]) or (bet_type == "Hándicap" and ("+" in bet_name_lower or "asiático +" in bet_name_lower))
-            
-            is_high_risk = any(k in bet_name_lower for k in [
-                "marcador", "resultado exacto", "score", "goleador", "marca gol", "scorer",
-                "tiros jugador", "remates jugador", "remates de", "tiros de"
-            ]) or odds > 4.0 or (bet_type == "Hándicap" and ("-" in bet_name_lower and not ("-0.5" in bet_name_lower or "-0.25" in bet_name_lower)))
-            
-            if is_low_risk:
-                est_prob_pct += 3.0
-                risk_label = "Segura" if odds <= 1.50 else "Moderada"
-                profile = "Apuesta conservadora"
-            elif is_high_risk:
-                penalty = 5.0 if odds <= 6.0 else 10.0
-                est_prob_pct -= penalty
-                risk_label = "Arriesgada" if odds <= 8.0 else "Muy arriesgada"
-                profile = "Apuesta especulativa"
-            elif bet_type == "Clasificación / Grupo":
-                risk_label = "Moderada" if odds <= 2.50 else "Arriesgada"
-                profile = "Apuesta equilibrada" if odds <= 2.50 else "Apuesta agresiva controlada"
+            # Bet type logic based on keywords
+            text_clean = bet_name.lower()
+            if any(k in text_clean for k in ["queda primera", "primera de grupo", "gana el grupo", "grupo", "clasifica"]):
+                bet_type = "Clasificación / Grupo"
+            elif any(k in text_clean for k in ["gana", "win", "ganador"]):
+                bet_type = "Resultado"
+            elif any(k in text_clean for k in ["goles", "over", "under", "más de", "menos de", "ambos marcan"]):
+                bet_type = "Goles"
+            elif any(k in text_clean for k in ["córners", "corners"]):
+                bet_type = "Córners"
+            elif any(k in text_clean for k in ["tarjetas", "cards"]):
+                bet_type = "Tarjetas"
+            elif any(k in text_clean for k in ["handicap", "hándicap"]):
+                bet_type = "Hándicap"
             else:
-                risk_label = "Moderada" if odds <= 2.00 else "Arriesgada"
-                profile = "Apuesta equilibrada"
+                bet_type = "Otro"
                 
-            est_prob_pct = max(1.0, min(95.0, est_prob_pct))
-            est_prob_decimal = est_prob_pct / 100.0
-            fair_odds = 1.0 / est_prob_decimal
-
-            # Relation
+            # Risk logic
             if bet_type == "Clasificación / Grupo":
-                if est_prob_pct >= 70.0:
-                    relation = "Alta probabilidad y beneficio moderado"
-                elif est_prob_pct >= 40.0 and risk_label not in ["Arriesgada", "Muy arriesgada"]:
-                    relation = "Probabilidad media con beneficio atractivo"
-                elif est_prob_pct >= 30.0 or risk_label in ["Arriesgada", "Muy arriesgada"]:
-                    relation = "Más riesgo, pero mayor beneficio potencial"
-                else:
-                    relation = "Cuota alta con probabilidad reducida"
-            elif est_prob_pct >= 70.0:
-                relation = "Alta probabilidad y beneficio moderado"
-            elif est_prob_pct >= 50.0:
-                relation = "Probabilidad media con beneficio atractivo"
-            elif est_prob_pct >= 30.0:
-                relation = "Más riesgo, pero mayor beneficio potencial"
+                risk_label = "Moderada" if odds <= 2.50 else "Arriesgada"
             else:
-                relation = "Cuota alta con probabilidad reducida"
+                if odds <= 1.50:
+                    risk_label = "Segura"
+                elif odds <= 2.20:
+                    risk_label = "Moderada"
+                elif odds <= 3.00:
+                    risk_label = "Arriesgada"
+                else:
+                    risk_label = "Muy arriesgada"
+                    
+            # Recommendation logic
+            if risk_label == "Segura":
+                recommendation = "Apuesta conservadora, beneficio limitado."
+            elif risk_label == "Moderada":
+                recommendation = "Apuesta equilibrada, puede tener sentido con stake controlado."
+            elif risk_label == "Arriesgada":
+                recommendation = "Apuesta agresiva, usar stake bajo."
+            else:
+                recommendation = "Apuesta especulativa, solo con importe muy pequeño."
 
-            # Input/Verification of stake and competition
-            st.markdown("### Verificar datos extraídos")
-            col_ver1, col_ver2 = st.columns(2)
-            with col_ver1:
-                sport_val = st.text_input("Deporte", value=sport_val, key="quick_ver_sport")
-                competition_val = st.text_input("Competición", value=competition_val, placeholder="Ejemplo: FIFA World Cup 2026", key="quick_ver_comp")
-                match_val = st.text_input("Partido / Evento", value=match_val, key="quick_ver_match")
-                bet_name = st.text_input("Apuesta", value=bet_name, key="quick_ver_bet_name")
-            with col_ver2:
-                betting_house_val = st.text_input("Casa de apuestas", value=betting_house_val, key="quick_ver_house")
-                odds = st.number_input("Cuota", min_value=1.01, value=odds, step=0.01, format="%.2f", key="quick_ver_odds")
-                
-                # Ask for stake: default to detected_stake if available, else 10.0
-                stake_default = float(detected_stake) if (detected_stake and detected_stake > 0.0) else 10.0
-                stake_val = st.number_input("Importe apostado (€)", min_value=0.1, value=stake_default, step=1.0, format="%.2f", key="quick_ver_stake")
+            # If no stake was detected, show number input for stake
+            stake_val = float(detected_stake) if (detected_stake and detected_stake > 0.0) else 0.0
+            if stake_val == 0.0:
+                stake_val = st.number_input("No se detectó un importe. Especifica el importe (€):", min_value=0.1, value=10.0, step=1.0, key="quick_stake_input")
                 
             pot_return = stake_val * odds
             pot_profit = stake_val * (odds - 1.0)
 
-            # Output UI card (PART 7)
+            # Output UI card (PART 3) - unindented for clean HTML rendering
             html_card = f"""<div style="background-color: #111111; padding: 22px; border-radius: 12px; border: 1px solid #E30613; margin-top: 20px; margin-bottom: 20px;">
 <h3 style="color: #E30613; margin: 0 0 15px 0; text-transform: uppercase;">Apuesta analizada</h3>
 <div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{bet_name}</div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; font-size: 14px; color: #a0aec0;">
+<div><b>Apuesta:</b> <span style="color: #ffffff;">{bet_name}</span></div>
 <div><b>Cuota:</b> <span style="color: #ffffff;">{odds:.2f}</span></div>
 <div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{est_prob_pct:.1f}%</span></div>
-<div><b>Cuota justa aprox.:</b> <span style="color: #ffffff;">{fair_odds:.2f}</span></div>
-<div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{bet_type}</span></div>
-<div><b>Nivel de riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
-<div><b>Perfil:</b> <span style="color: #ffffff;">{profile}</span></div>
-<div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400; font-weight: bold;">{relation}</span></div>
-<div><b>Importe detectado:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
+<div><b>Tipo:</b> <span style="color: #ffffff;">{bet_type}</span></div>
+<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
+<div><b>Importe:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
 <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
 <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+<div style="grid-column: span 2;"><b>Recomendación:</b> <span style="color: #ffd400; font-weight: bold;">{recommendation}</span></div>
 </div>
 </div>"""
             st.markdown(html_card, unsafe_allow_html=True)
 
-            # Actions (PART 8)
+            # Actions (GUARDAR EN FAVORITAS / GUARDAR EN CARTERA)
             col_act1, col_act2 = st.columns(2)
             with col_act1:
                 if st.button("GUARDAR EN FAVORITAS", use_container_width=True, key="quick_save_fav_btn"):
                     new_fav = {
                         "id": f"quick_fav_{int(time.time())}",
                         "date_saved": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "match": match_val,
-                        "competition": competition_val,
-                        "betting_house": betting_house_val,
+                        "match": match_val if match_val else bet_name,
+                        "competition": competition_val if competition_val else "",
+                        "betting_house": betting_house_val if betting_house_val else "Winamax",
                         "market": bet_name,
                         "odds": float(odds),
                         "estimated_probability": float(est_prob_decimal),
@@ -3348,7 +3272,7 @@ elif section == "Analizar apuesta":
                         "status": "Favorita",
                         "combined_bet": False,
                         "legs": [],
-                        "sport": sport_val
+                        "sport": sport_val if sport_val else "Fútbol"
                     }
                     if "favorites" not in st.session_state:
                         st.session_state.favorites = []
@@ -3360,25 +3284,23 @@ elif section == "Analizar apuesta":
                     navigate_to_section("Favoritas")
                     
             with col_act2:
-                if st.button("GUARDAR COMO REALIZADA EN CARTERA", use_container_width=True, key="quick_save_port_btn"):
-                    profit_val = 0.0
+                if st.button("GUARDAR EN CARTERA", use_container_width=True, key="quick_save_port_btn"):
                     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
                     new_port_bet = {
                         "id": f"quick_port_{int(time.time())}",
                         "date_placed": now_str,
                         "date_saved": now_str,
-                        "sport": sport_val,
-                        "competition": competition_val,
-                        "match": match_val,
-                        "betting_house": betting_house_val,
+                        "sport": sport_val if sport_val else "Fútbol",
+                        "competition": competition_val if competition_val else "",
+                        "match": match_val if match_val else bet_name,
+                        "betting_house": betting_house_val if betting_house_val else "Winamax",
                         "market": bet_name,
                         "odds": float(odds),
                         "stake": float(stake_val),
                         "status": "Pendiente",
                         "potential_return": float(pot_return),
                         "potential_profit": float(pot_profit),
-                        "profit": float(profit_val),
+                        "profit": 0.0,
                         "combined_bet": False,
                         "legs": [],
                         "estimated_probability": float(est_prob_decimal),

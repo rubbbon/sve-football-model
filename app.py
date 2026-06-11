@@ -587,6 +587,12 @@ def navigate_to_section(sec):
 # Custom Injectable CSS styling to achieve the requested red, black, and white professional trading theme
 st.markdown("""
 <style>
+/* Reduce main container default padding for a wider layout */
+[data-testid="block-container"] {
+    padding-left: 6rem !important;
+    padding-right: 6rem !important;
+}
+
 /* Dark base background for the entire dashboard */
 .stApp {
     background-color: #080808 !important;
@@ -767,7 +773,7 @@ div.element-container:has(.home-card-marker) + div.element-container div.stButto
     font-weight: 700 !important;
     padding: 0 !important;
     width: 100% !important;
-    height: 240px !important;
+    height: 280px !important;
     text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
     transition: all 0.3s ease !important;
@@ -1053,7 +1059,7 @@ if st.button("", key="top_clickable_balance_btn"):
 
 # 4. Main Title Section (Centered on Inicio, Left-aligned on others)
 if st.session_state.current_section == "Inicio":
-    st.markdown("""<div style="text-align: center; margin-top: 50px; margin-bottom: 40px;">
+    st.markdown("""<div style="text-align: center; margin-top: 10vh; margin-bottom: 40px;">
 <div class="big-title" style="font-size: 44px; margin-bottom: 10px;">CALCULADORA DE APUESTAS</div>
 <div class="subtitle" style="font-size: 18px; color: #a0aec0;">Plataforma de análisis, gestión y seguimiento de apuestas</div>
 </div>""", unsafe_allow_html=True)
@@ -1063,7 +1069,7 @@ else:
 
 # 4. Left Sidebar Navigation Menu with Hamburger Open/Close
 if "sidebar_open" not in st.session_state:
-    st.session_state.sidebar_open = True
+    st.session_state.sidebar_open = False
 
 # Dynamic sidebar width CSS based on open/close state
 if st.session_state.sidebar_open:
@@ -1102,11 +1108,11 @@ div.element-container:has(.hamburger-marker) + div.element-container div.stButto
     background-color: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    font-size: 28px !important;
+    font-size: 32px !important;
     font-weight: bold !important;
     padding: 0 !important;
-    width: 40px !important;
-    height: 40px !important;
+    width: 48px !important;
+    height: 48px !important;
     min-height: 0 !important;
     margin-left: 16px !important;
     margin-bottom: 20px !important;

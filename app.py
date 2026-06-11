@@ -187,6 +187,117 @@ def classify_bet_type(market: str, combined_bet: bool) -> str:
     else:
         return "Otro"
 
+def parse_natural_bet(text: str):
+    import re
+    # Lowercase for pattern matching
+    text_l = text.lower()
+    
+    # Clean text: convert comma decimal to dot (e.g. 1,75 -> 1.75)
+    text_clean = re.sub(r'(\d+),(\d+)', r'\1.\2', text_l)
+    
+    # 1. Odds detection
+    odds = None
+    odds_match = re.search(r'(?i)\b(?:cuota|odd|@|a)\s*[:=]?\s*(\d+(?:\.\d+)?)', text_clean)
+    if odds_match:
+        try:
+            odds = float(odds_match.group(1))
+        except ValueError:
+            pass
+    if not odds:
+        # fallback: find any float/int that is between 1.01 and 100.0 and doesn't look like stake
+        floats = re.findall(r'\b\d+\.\d+\b', text_clean)
+        for f in floats:
+            try:
+                val = float(f)
+                if 1.01 <= val <= 50.0:
+                    odds = val
+                    break
+            except ValueError:
+                pass
+                
+    # 2. Stake detection
+    stake = None
+    stake_match1 = re.search(r'(\d+(?:\.\d+)?)\s*(?:euros|euro|€)', text_clean)
+    if stake_match1:
+        try:
+            stake = float(stake_match1.group(1))
+        except ValueError:
+            pass
+    if not stake:
+        stake_match2 = re.search(r'(?i)\b(?:le metí|le meti|meto|stake)\s+(\d+(?:\.\d+)?)', text_clean)
+        if stake_match2:
+            try:
+                stake = float(stake_match2.group(1))
+            except ValueError:
+                pass
+                
+    # 3. Betting house detection
+    betting_house = "Winamax" # default
+    houses = ["Winamax", "Bet365", "Codere", "Betfair", "Bwin", "Pinnacle", "Sportium"]
+    for h in houses:
+        if h.lower() in text_clean:
+            betting_house = h
+            break
+            
+    # 4. Sport
+    sport = "Fútbol" # default
+    if "baloncesto" in text_clean or "basket" in text_clean:
+        sport = "Baloncesto"
+    elif "tenis" in text_clean or "tennis" in text_clean:
+        sport = "Tenis"
+        
+    # 5. Bet type using keywords
+    bet_type = "Otro"
+    if any(k in text_clean for k in ["queda primera", "primero de grupo", "gana el grupo", "clasifica", "clasificación", "clasificacion"]):
+        bet_type = "Clasificación / Grupo"
+    elif any(k in text_clean for k in ["goles", "over", "under", "más de", "menos de", "ambos marcan", "mas de", "menos de"]):
+        bet_type = "Goles"
+    elif any(k in text_clean for k in ["córners", "corners", "saques de esquina", "corner", "córner"]):
+        bet_type = "Córners"
+    elif any(k in text_clean for k in ["tarjetas", "cards", "amonestaciones", "tarjeta", "card"]):
+        bet_type = "Tarjetas"
+    elif any(k in text_clean for k in ["handicap", "hándicap", "asiático", "asian", "asiatico"]):
+        bet_type = "Hándicap"
+    elif any(k in text_clean for k in ["jugador", "tiros jugador", "remates jugador", "tiros de", "remates de"]):
+        bet_type = "Jugador"
+    elif any(k in text_clean for k in ["combined", "combinada", "+", "and", "y cuota combinada"]):
+        bet_type = "Combinada"
+    elif any(k in text_clean for k in ["gana", "win", "ganador"]):
+        bet_type = "Resultado"
+        
+    # 6. Extract match name and bet name
+    text_stripped = text # use original casing for names
+    text_stripped = re.sub(r'(?i)\b(?:cuota|odd|@|a)\s*[:=]?\s*\d+(?:[.,]\d+)?\b', '', text_stripped)
+    text_stripped = re.sub(r'(?i)\b\d+(?:[.,]\d+)?\s*(?:euros|euro|€)\b', '', text_stripped)
+    text_stripped = re.sub(r'(?i)\b(?:le metí|le meti|meto|stake)\s+\d+(?:[.,]\d+)?\b', '', text_stripped)
+    text_stripped = re.sub(r'(?i)\b(?:en|de|del)?\s*(?:Winamax|Bet365|Codere|Betfair|Bwin|Pinnacle|Sportium)\b', '', text_stripped)
+    
+    text_stripped = re.sub(r'\s+', ' ', text_stripped).strip(" ,.!?")
+    bet_name = text_stripped
+    
+    # Try to guess match
+    match_event = ""
+    vs_match = re.search(r'(?i)(.*?)\s+(?:vs|contra|gana a|-)\s+(.*)', text_stripped)
+    if vs_match:
+        team1 = vs_match.group(1).strip()
+        team2 = vs_match.group(2).strip()
+        team1 = re.sub(r'(?i)\b(gana|win)\b', '', team1).strip()
+        team2 = re.sub(r'(?i)\b(gana|win)\b', '', team2).strip()
+        match_event = f"{team1} vs {team2}"
+    else:
+        match_event = bet_name
+        
+    return {
+        "bet_name": bet_name,
+        "match": match_event,
+        "odds": odds,
+        "stake": stake,
+        "betting_house": betting_house,
+        "sport": sport,
+        "type": bet_type,
+        "competition": ""
+    }
+
 def save_or_update_studied_match(match, competition, phase, betting_house, presets, custom_markets="", csv_data=None, recommendations=None):
     if not match:
         return
@@ -385,8 +496,7 @@ st.set_page_config(
 # Initialize session state keys safely at startup
 if "current_section" not in st.session_state:
     st.session_state.current_section = "Inicio"
-if "nav_sidebar_radio" not in st.session_state:
-    st.session_state.nav_sidebar_radio = st.session_state.current_section
+
 if "intro_seen" not in st.session_state:
     st.session_state.intro_seen = False
 if "generated_prompt" not in st.session_state:
@@ -406,7 +516,6 @@ if "studied_matches" not in st.session_state:
 
 def navigate_to_section(sec):
     st.session_state.current_section = sec
-    st.session_state.nav_sidebar_radio = sec
     st.rerun()
 
 
@@ -871,6 +980,7 @@ SECTIONS = [
     "Cartera",
     "Estadísticas del modelo",
     "Asistente manual",
+    "Analizar apuesta",
     "Historial de partidos estudiados",
     "Evolución del saldo"
 ]
@@ -898,8 +1008,7 @@ selected_sidebar_sec = st.sidebar.radio(
     "Menú de navegación",
     SECTIONS,
     index=sec_index,
-    label_visibility="collapsed",
-    key="nav_sidebar_radio"
+    label_visibility="collapsed"
 )
 
 if selected_sidebar_sec != st.session_state.current_section:
@@ -966,7 +1075,7 @@ def clean_match_name(text):
 # SECCIÓN: INICIO
 # ----------------------------------------------------
 if section == "Inicio":
-    col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+    col_h1, col_h2, col_h3 = st.columns(3)
     with col_h1:
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
         if st.button("Calculadora", key="h_btn_calc"):
@@ -978,34 +1087,38 @@ if section == "Inicio":
             navigate_to_section("Favoritas")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_h2:
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
         if st.button("Top cuotas", key="h_btn_top"):
             navigate_to_section("Top cuotas")
         st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
+
+    with col_h2:
+        st.markdown('<div class="home-card">', unsafe_allow_html=True)
         if st.button("Cartera", key="h_btn_cart"):
             navigate_to_section("Cartera")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_h3:
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
         if st.button("Estadísticas del modelo", key="h_btn_est"):
             navigate_to_section("Estadísticas del modelo")
         st.markdown('</div>', unsafe_allow_html=True)
-        
+
         st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
         if st.button("Asistente manual", key="h_btn_asis"):
             navigate_to_section("Asistente manual")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_h4:
+    with col_h3:
         st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        if st.button("Analizar apuesta", key="h_btn_quick"):
+            navigate_to_section("Analizar apuesta")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
         if st.button("Historial de partidos estudiados", key="h_btn_hist"):
             navigate_to_section("Historial de partidos estudiados")
         st.markdown('</div>', unsafe_allow_html=True)
-        
+
         st.markdown('<div class="home-card" style="margin-top:15px;">', unsafe_allow_html=True)
         if st.button("Evolución del saldo", key="h_btn_evol"):
             navigate_to_section("Evolución del saldo")
@@ -3041,6 +3154,217 @@ CSV rules:
                         st.warning("No se encontró ninguna apuesta con los BetIDs proporcionados en la Cartera o el formato es incorrecto.")
             except Exception as e:
                 st.error(f"Error al procesar el CSV de resultados: {str(e)}")
+
+# ----------------------------------------------------
+# SECCIÓN: ANALIZAR APUESTA
+# ----------------------------------------------------
+elif section == "Analizar apuesta":
+    st.markdown('<div class="big-title">ANALIZAR APUESTA</div>', unsafe_allow_html=True)
+    st.markdown("Escribe los detalles de tu apuesta en lenguaje natural y la calculadora estimará la probabilidad y el riesgo de forma instantánea.")
+
+    # Large text area
+    natural_input = st.text_area(
+        "Escribe tu apuesta",
+        placeholder="Ejemplo: España gana a Cabo Verde cuota 2\nEjemplo: España queda primera de grupo cuota 2, 10 euros en Winamax\nEjemplo: Cabo Verde más de 1.5 tarjetas cuota 1.75",
+        height=150,
+        key="quick_bet_text_input"
+    )
+
+    # Optional Screenshot Uploader
+    uploaded_file = st.file_uploader(
+        "Subir captura de la apuesta (opcional)",
+        type=["png", "jpg", "jpeg"],
+        key="quick_bet_file_upload"
+    )
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="Vista previa de la captura")
+        st.info("Captura añadida como referencia. Para mayor precisión, escribe también la apuesta en el cuadro de texto.")
+
+    # Analyze Button
+    if st.button("ANALIZAR APUESTA", use_container_width=True, key="quick_bet_analyze_btn"):
+        if not natural_input.strip():
+            st.error("Por favor, escribe los detalles de la apuesta antes de analizar.")
+        else:
+            parsed = parse_natural_bet(natural_input)
+            st.session_state.quick_bet_parsed = parsed
+            
+    # Display parsed and analyzed results if available
+    if "quick_bet_parsed" in st.session_state and st.session_state.quick_bet_parsed is not None:
+        parsed = st.session_state.quick_bet_parsed
+        bet_name = parsed["bet_name"]
+        match_val = parsed["match"]
+        odds = parsed["odds"]
+        detected_stake = parsed["stake"]
+        betting_house_val = parsed["betting_house"]
+        sport_val = parsed["sport"]
+        bet_type = parsed["type"]
+        competition_val = parsed["competition"]
+
+        if not odds or odds <= 1.0:
+            st.warning("No se pudo detectar una cuota válida en el texto (por ejemplo, 'cuota 2' o '@2.00'). Por favor, especifica la cuota para poder completar el análisis.")
+            # Number input to fallback
+            odds = st.number_input("Cuota corregida", min_value=1.01, value=2.00, step=0.01, format="%.2f", key="quick_odds_fallback")
+            parsed["odds"] = odds
+            st.session_state.quick_bet_parsed = parsed
+
+        if odds and odds > 1.0:
+            # Calculation logic (PART 6)
+            implied_prob = 1.0 / odds
+            est_prob_decimal = implied_prob * 0.94
+            est_prob_pct = est_prob_decimal * 100.0
+            
+            # Risk estimation based on keywords and name
+            bet_type_lower = bet_type.lower()
+            bet_name_lower = bet_name.lower()
+            
+            is_low_risk = any(k in bet_name_lower or k in bet_type_lower for k in [
+                "doble op", "doble oportunidad", "double chance", "o empate", "or draw",
+                "empate no valido", "draw no bet", "empate no sirve",
+                "menos de 3.5", "under 3.5", "menos de 4.5", "under 4.5"
+            ]) or (bet_type == "Hándicap" and ("+" in bet_name_lower or "asiático +" in bet_name_lower))
+            
+            is_high_risk = any(k in bet_name_lower for k in [
+                "marcador", "resultado exacto", "score", "goleador", "marca gol", "scorer",
+                "tiros jugador", "remates jugador", "remates de", "tiros de"
+            ]) or odds > 4.0 or (bet_type == "Hándicap" and ("-" in bet_name_lower and not ("-0.5" in bet_name_lower or "-0.25" in bet_name_lower)))
+            
+            if is_low_risk:
+                est_prob_pct += 3.0
+                risk_label = "Segura" if odds <= 1.50 else "Moderada"
+                profile = "Apuesta conservadora"
+            elif is_high_risk:
+                penalty = 5.0 if odds <= 6.0 else 10.0
+                est_prob_pct -= penalty
+                risk_label = "Arriesgada" if odds <= 8.0 else "Muy arriesgada"
+                profile = "Apuesta especulativa"
+            elif bet_type == "Clasificación / Grupo":
+                risk_label = "Moderada" if odds <= 2.50 else "Arriesgada"
+                profile = "Apuesta equilibrada" if odds <= 2.50 else "Apuesta agresiva controlada"
+            else:
+                risk_label = "Moderada" if odds <= 2.00 else "Arriesgada"
+                profile = "Apuesta equilibrada"
+                
+            est_prob_pct = max(1.0, min(95.0, est_prob_pct))
+            est_prob_decimal = est_prob_pct / 100.0
+            fair_odds = 1.0 / est_prob_decimal
+
+            # Relation
+            if est_prob_pct >= 70.0:
+                relation = "Alta probabilidad y beneficio moderado"
+            elif est_prob_pct >= 50.0:
+                relation = "Probabilidad media con beneficio atractivo"
+            elif est_prob_pct >= 30.0:
+                relation = "Más riesgo, pero mayor beneficio potencial"
+            else:
+                relation = "Cuota alta con probabilidad reducida"
+
+            # Input/Verification of stake and competition
+            st.markdown("### Verificar datos extraídos")
+            col_ver1, col_ver2 = st.columns(2)
+            with col_ver1:
+                sport_val = st.text_input("Deporte", value=sport_val, key="quick_ver_sport")
+                competition_val = st.text_input("Competición", value=competition_val, placeholder="Ejemplo: FIFA World Cup 2026", key="quick_ver_comp")
+                match_val = st.text_input("Partido / Evento", value=match_val, key="quick_ver_match")
+                bet_name = st.text_input("Apuesta", value=bet_name, key="quick_ver_bet_name")
+            with col_ver2:
+                betting_house_val = st.text_input("Casa de apuestas", value=betting_house_val, key="quick_ver_house")
+                odds = st.number_input("Cuota", min_value=1.01, value=odds, step=0.01, format="%.2f", key="quick_ver_odds")
+                
+                # Ask for stake: default to detected_stake if available, else 10.0
+                stake_default = float(detected_stake) if (detected_stake and detected_stake > 0.0) else 10.0
+                stake_val = st.number_input("Importe apostado (€)", min_value=0.1, value=stake_default, step=1.0, format="%.2f", key="quick_ver_stake")
+                
+            pot_return = stake_val * odds
+            pot_profit = stake_val * (odds - 1.0)
+
+            # Output UI card (PART 7)
+            st.markdown(f"""
+            <div style="background-color: #111111; padding: 22px; border-radius: 12px; border: 1px solid #E30613; margin-top: 20px; margin-bottom: 20px;">
+                <h3 style="color: #E30613; margin: 0 0 15px 0; text-transform: uppercase;">Apuesta analizada</h3>
+                <div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{bet_name}</div>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; font-size: 14px; color: #a0aec0;">
+                    <div><b>Cuota:</b> <span style="color: #ffffff;">{odds:.2f}</span></div>
+                    <div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{est_prob_pct:.1f}%</span></div>
+                    <div><b>Cuota justa aprox.:</b> <span style="color: #ffffff;">{fair_odds:.2f}</span></div>
+                    <div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{bet_type}</span></div>
+                    <div><b>Nivel de riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
+                    <div><b>Perfil:</b> <span style="color: #ffffff;">{profile}</span></div>
+                    <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400; font-weight: bold;">{relation}</span></div>
+                    <div><b>Importe detectado:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
+                    <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
+                    <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Actions (PART 8)
+            col_act1, col_act2 = st.columns(2)
+            with col_act1:
+                if st.button("GUARDAR EN FAVORITAS", use_container_width=True, key="quick_save_fav_btn"):
+                    new_fav = {
+                        "id": f"quick_fav_{int(time.time())}",
+                        "date_saved": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "match": match_val,
+                        "competition": competition_val,
+                        "betting_house": betting_house_val,
+                        "market": bet_name,
+                        "odds": float(odds),
+                        "estimated_probability": float(est_prob_decimal),
+                        "risk": 0.25 if risk_label == "Moderada" else (0.15 if risk_label == "Segura" else (0.45 if risk_label == "Arriesgada" else 0.65)),
+                        "uncertainty": 0.10,
+                        "type": bet_type,
+                        "stake": float(stake_val),
+                        "potential_return": float(pot_return),
+                        "potential_profit": float(pot_profit),
+                        "status": "Favorita",
+                        "combined_bet": False,
+                        "legs": [],
+                        "sport": sport_val
+                    }
+                    if "favorites" not in st.session_state:
+                        st.session_state.favorites = []
+                    st.session_state.favorites.append(new_fav)
+                    save_favorites()
+                    st.success("¡Apuesta guardada con éxito en favoritas!")
+                    time.sleep(0.5)
+                    st.session_state.quick_bet_parsed = None
+                    navigate_to_section("Favoritas")
+                    
+            with col_act2:
+                if st.button("GUARDAR COMO REALIZADA EN CARTERA", use_container_width=True, key="quick_save_port_btn"):
+                    profit_val = 0.0
+                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    new_port_bet = {
+                        "id": f"quick_port_{int(time.time())}",
+                        "date_placed": now_str,
+                        "date_saved": now_str,
+                        "sport": sport_val,
+                        "competition": competition_val,
+                        "match": match_val,
+                        "betting_house": betting_house_val,
+                        "market": bet_name,
+                        "odds": float(odds),
+                        "stake": float(stake_val),
+                        "status": "Pendiente",
+                        "potential_return": float(pot_return),
+                        "potential_profit": float(pot_profit),
+                        "profit": float(profit_val),
+                        "combined_bet": False,
+                        "legs": [],
+                        "estimated_probability": float(est_prob_decimal),
+                        "risk": risk_label,
+                        "type": bet_type
+                    }
+                    if "portfolio" not in st.session_state:
+                        st.session_state.portfolio = []
+                    st.session_state.portfolio.append(new_port_bet)
+                    save_portfolio()
+                    st.success("¡Apuesta guardada con éxito en la cartera!")
+                    time.sleep(0.5)
+                    st.session_state.quick_bet_parsed = None
+                    navigate_to_section("Cartera")
 
 # ----------------------------------------------------
 # SECCIÓN: HISTORIAL DE PARTIDOS ESTUDIADOS

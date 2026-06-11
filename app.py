@@ -981,7 +981,10 @@ def get_current_balance_safe():
     return 0.0
 
 # 2. Calculate balance display and colors
-current_balance = get_current_balance_safe()
+try:
+    current_balance = get_current_balance_safe()
+except Exception:
+    current_balance = 0.0
 if current_balance > 0:
     balance_amount = f"+{current_balance:.2f} €"
     balance_color = "#00C853"
@@ -2230,7 +2233,7 @@ elif section == "Cartera":
     st.markdown("<br>", unsafe_allow_html=True)
     col_g4, col_g5, col_g6, col_g7, col_g8, col_g9 = st.columns(6)
     with col_g4:
-        st.markdown(f'<div class="mini-metric-box"><b>Saldo total:</b><br>{metrics_glob["saldo_total"]:.2f} €</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="mini-metric-box"><b>Saldo total:</b><br>{get_current_balance_safe():.2f} €</div>', unsafe_allow_html=True)
     with col_g5:
         st.markdown(f'<div class="mini-metric-box"><b>Pendientes:</b><br>{metrics_glob["apuestas_pendientes"]}</div>', unsafe_allow_html=True)
     with col_g6:
@@ -3585,9 +3588,10 @@ elif section == "Evolución del saldo":
     metrics_glob = calculate_balance_metrics(portfolio)
     col_e1, col_e2, col_e3, col_e4 = st.columns(4)
     with col_e1:
-        e_saldo_color = "#00C853" if metrics_glob["saldo_total"] >= 0 else "#FF3B3B"
-        e_saldo_sign = "+" if metrics_glob["saldo_total"] > 0 else ""
-        st.markdown(f'<div class="mini-metric-box"><b>Saldo total:</b><br><span style="color:{e_saldo_color}; font-size:18px; font-weight:bold;">{e_saldo_sign}{metrics_glob["saldo_total"]:.2f} €</span></div>', unsafe_allow_html=True)
+        current_bal_val = get_current_balance_safe()
+        e_saldo_color = "#00C853" if current_bal_val >= 0 else "#FF3B3B"
+        e_saldo_sign = "+" if current_bal_val > 0 else ""
+        st.markdown(f'<div class="mini-metric-box"><b>Saldo total:</b><br><span style="color:{e_saldo_color}; font-size:18px; font-weight:bold;">{e_saldo_sign}{current_bal_val:.2f} €</span></div>', unsafe_allow_html=True)
     with col_e2:
         st.markdown(f'<div class="mini-metric-box"><b>Beneficio total:</b><br><span style="color:{e_saldo_color}; font-size:18px; font-weight:bold;">{e_saldo_sign}{metrics_glob["beneficio_obtenido"]:.2f} €</span></div>', unsafe_allow_html=True)
     with col_e3:

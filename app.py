@@ -759,36 +759,34 @@ div.element-container:has(.home-card-marker) {
 }
 
 div.element-container:has(.home-card-marker) + div.element-container div.stButton > button {
-    background-color: #0b0b0b !important;
-    color: #E30613 !important;
-    border: 1px solid #E30613 !important;
-    border-radius: 12px !important;
+    background-color: #080808 !important;
+    color: #E10600 !important;
+    border: 1px solid #E10600 !important;
+    border-radius: 18px !important;
     font-size: 24px !important;
-    font-weight: 800 !important;
-    padding: 2rem 1rem !important;
+    font-weight: 700 !important;
+    padding: 0 !important;
     width: 100% !important;
-    height: 220px !important;
+    height: 240px !important;
     text-transform: uppercase !important;
-    letter-spacing: 1px !important;
+    letter-spacing: 0.08em !important;
     transition: all 0.3s ease !important;
     box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
     text-align: center !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    box-sizing: border-box !important;
 }
 
 div.element-container:has(.home-card-marker) + div.element-container div.stButton > button:hover {
-    background-color: #E30613 !important;
+    background-color: #E10600 !important;
     color: #ffffff !important;
-    box-shadow: 0 0 25px rgba(227, 6, 19, 0.6) !important;
+    box-shadow: 0 0 25px rgba(225, 6, 0, 0.6) !important;
     transform: translateY(-4px) !important;
 }
 
-/* Top Left User Profile Styling */
-div.element-container:has(.top-header-marker) {
-    display: none !important;
-}
+/* Top Left User Profile Styling - Deprecated */
 
 div.element-container:has(.hamburger-marker),
 div.element-container:has(.sidebar-active-marker),
@@ -964,68 +962,73 @@ if "intro_seen" not in st.session_state:
     st.session_state.intro_seen = True
     st.rerun()
 
-# 2. Calculate global metrics for the header
-portfolio = st.session_state.get("portfolio", [])
-metrics_glob = calculate_balance_metrics(portfolio)
-
-bal_val = metrics_glob["saldo_total"]
-if bal_val > 0:
-    bal_str = f"Usuario | Saldo: +{bal_val:.2f} €"
-    bal_color = "#00C853"
-elif bal_val < 0:
-    bal_str = f"Usuario | Saldo: -{abs(bal_val):.2f} €"
-    bal_color = "#FF3B3B"
+# 2. Calculate balance display and colors
+current_balance = metrics_glob["saldo_total"]
+if current_balance > 0:
+    balance_amount = f"+{current_balance:.2f} €"
+    balance_color = "#00C853"
+elif current_balance < 0:
+    balance_amount = f"-{abs(current_balance):.2f} €"
+    balance_color = "#FF3B3B"
 else:
-    bal_str = f"Usuario | Saldo: 0.00 €"
-    bal_color = "#ffffff"
+    balance_amount = "0.00 €"
+    balance_color = "#FFFFFF"
 
-# 3. Top Left User Box Layout (Clickable balance text positioned dynamically based on sidebar state)
-if st.session_state.get("sidebar_open", True):
-    left_pos = "280px"
-else:
-    left_pos = "100px"
-
+# 3. Render HTML and Style overlay button
 st.markdown(f"""
-<div class="top-header-marker"></div>
+<div class="top-balance">
+    <span class="balance-label">Usuario | Saldo:</span>
+    <span style="color:{balance_color}; font-weight:700;"> {balance_amount}</span>
+</div>
 <style>
-div.element-container:has(.top-header-marker) + div.element-container {{
-    position: fixed !important;
-    top: 15px !important;
-    left: {left_pos} !important;
-    z-index: 999999 !important;
-    width: auto !important;
+div[data-testid="stVerticalBlock"]:has(> div.element-container > .top-balance) {{
+    position: relative !important;
 }}
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button {{
-    color: {bal_color} !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
+.top-balance {{
+    position: relative;
+    text-align: left;
+    margin-bottom: 20px;
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 24px;
+}}
+.balance-label {{
+    color: #E10600;
+}}
+
+/* Target the container of the button immediately following the balance text */
+div.element-container:has(.top-balance) + div.element-container {{
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 250px !important;
+    height: 24px !important;
+    z-index: 9999 !important;
+    margin: 0 !important;
     padding: 0 !important;
-    font-size: 14px !important;
-    font-weight: bold !important;
-    cursor: pointer !important;
-    text-transform: none !important;
-    letter-spacing: 0px !important;
-    height: auto !important;
-    min-height: auto !important;
-    line-height: normal !important;
 }}
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:hover,
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:focus,
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:active,
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:focus-visible {{
-    color: {bal_color} !important;
-    background-color: transparent !important;
+div.element-container:has(.top-balance) + div.element-container div.stButton {{
+    width: 100% !important;
+    height: 100% !important;
+}}
+div.element-container:has(.top-balance) + div.element-container div.stButton > button {{
+    width: 100% !important;
+    height: 100% !important;
+    background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    outline: none !important;
-    text-decoration: underline !important;
+    color: transparent !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    opacity: 0 !important;
 }}
 </style>
 """, unsafe_allow_html=True)
 
-if st.button(bal_str, key="top_clickable_balance_btn"):
-    navigate_to_section("Evolución del saldo")
+if st.button("", key="top_clickable_balance_btn"):
+    st.session_state.current_section = "Evolución del saldo"
+    st.rerun()
 
 # 4. Main Title Section (Centered on Inicio, Left-aligned on others)
 if st.session_state.current_section == "Inicio":

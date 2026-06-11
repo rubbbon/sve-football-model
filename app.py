@@ -713,7 +713,7 @@ section[data-testid="stSidebar"] {
 
 section[data-testid="stSidebar"] div[role="radiogroup"] label {
     background-color: #111111 !important;
-    color: #F5F5F5 !important;
+    color: #ffffff !important;
     border: 1px solid #222222 !important;
     border-radius: 6px !important;
     padding: 8px 12px !important;
@@ -722,6 +722,12 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label {
     font-size: 14px !important;
     transition: all 0.2s ease !important;
     cursor: pointer !important;
+}
+
+section[data-testid="stSidebar"] div[role="radiogroup"] label p,
+section[data-testid="stSidebar"] div[role="radiogroup"] label span,
+section[data-testid="stSidebar"] div[role="radiogroup"] label div {
+    color: #ffffff !important;
 }
 
 section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
@@ -735,7 +741,9 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true
     color: #ffffff !important;
 }
 
-section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] span {
+section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] p,
+section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] span,
+section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true"] div {
     color: #ffffff !important;
 }
 
@@ -1010,6 +1018,15 @@ if section == "Inicio":
 # ----------------------------------------------------
 elif section == "Calculadora":
     st.header("Calculadora")
+    st.markdown("""
+    <div style="background-color: #111111; padding: 15px; border-radius: 8px; border-left: 4px solid #E30613; margin-bottom: 20px; font-size: 14px; color: #ffffff;">
+        <span style="font-weight: bold; color: #E30613; text-transform: uppercase; letter-spacing: 0.5px;">Flujo de uso recomendado:</span><br>
+        1. Genera o actualiza el prompt del partido.<br>
+        2. Pega el CSV con cuotas actuales.<br>
+        3. Calcula las apuestas recomendadas.<br>
+        4. Guarda en favoritas o marca como realizada en Cartera.
+    </div>
+    """, unsafe_allow_html=True)
     if "config_match" not in st.session_state:
         st.session_state.config_match = ""
     if "config_competition" not in st.session_state:
@@ -1171,6 +1188,9 @@ You must return ONLY a CSV with exactly these columns:
 Market,Odds,Probability,Risk,Uncertainty,Type
 
 CSV rules:
+- Use real current odds from the selected betting house if available. If exact odds are not available, use the closest available market odds and increase uncertainty. Do not invent precise odds. If a market does not have a reliable current odd, do not include it in the CSV.
+- Prioritize markets with decimal odds between 1.50 and 2.50, because the app focuses on practical recommended bets, not extreme long shots or very low odds.
+- Return only markets that can realistically be considered for simple or combined betting recommendations.
 - Odds must be in decimal format.
 - Probability must be a number from 0 to 100.
 - Risk must be a number from 0 to 100.
@@ -1181,7 +1201,6 @@ CSV rules:
 - Do not include markets without odds.
 - If data is missing, increase uncertainty.
 - Do not force bets.
-- Only include markets with realistic potential value.
 
 Here is the model formula for context:
 EV* = [(Estimated Probability − λ × Uncertainty − ρ × Risk) × Odds] − 1
@@ -1348,19 +1367,43 @@ Please be conservative with:
 
     with col2:
         total_stake = st.number_input("Cantidad total a apostar (€)", min_value=1.0, value=st.session_state.config_total_stake, step=1.0)
-        num_picks = 3
-        strategy_options = ["60 / 25 / 15", "50 / 30 / 20", "70 / 20 / 10"]
+        
+        # Selectbox: Número de apuestas
+        try:
+            curr_picks = st.session_state.get("config_num_picks", 2)
+            picks_idx = [1, 2, 3].index(curr_picks)
+        except ValueError:
+            picks_idx = 1
             
-        valid_defaults = []
+        num_picks = st.selectbox(
+            "Número de apuestas",
+            [1, 2, 3],
+            index=picks_idx,
+            key="config_num_picks"
+        )
+        
+        if num_picks == 1:
+            strategy_options = ["100%"]
+            default_strategies = ["100%"]
+        elif num_picks == 2:
+            strategy_options = ["50 / 50", "60 / 40", "70 / 30", "75 / 25", "80 / 20"]
+            default_strategies = ["50 / 50", "75 / 25"]
+        else: # num_picks == 3
+            strategy_options = ["50 / 30 / 20", "60 / 25 / 15", "70 / 20 / 10"]
+            default_strategies = ["50 / 30 / 20", "60 / 25 / 15"]
+            
         if "config_stake_strategies" in st.session_state:
             valid_defaults = [s for s in st.session_state.config_stake_strategies if s in strategy_options]
-        if not valid_defaults:
-            valid_defaults = [strategy_options[0]]
+            if not valid_defaults:
+                valid_defaults = default_strategies
+            st.session_state.config_stake_strategies = valid_defaults
+        else:
+            valid_defaults = default_strategies
+            st.session_state.config_stake_strategies = valid_defaults
             
         selected_strategies = st.multiselect(
-            "Estrategia de reparto",
+            "Estrategias de reparto",
             options=strategy_options,
-            default=valid_defaults,
             key="config_stake_strategies"
         )
 
@@ -1371,17 +1414,12 @@ Please be conservative with:
         cuota_maxima = st.number_input("Cuota máxima objetivo", min_value=1.01, value=st.session_state.config_cuota_maxima, step=0.01)
         allow_combined = st.checkbox("Permitir combinadas", value=st.session_state.config_allow_combined)
 
-    st.markdown("### Model Formula Identity")
-    st.markdown(
-        r"""
-        <div class="formula">
-        EV* = [(Estimated Probability − λ × Uncertainty − ρ × Risk) × Odds] − 1
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
     st.header("3. Entrada CSV de mercados")
+    st.markdown("""
+    <div style="background-color: #111111; padding: 12px; border-radius: 6px; border: 1px solid #E30613; margin-bottom: 15px; font-size: 13px; color: #ffffff;">
+        Antes de calcular, asegúrate de que las cuotas del CSV son actuales. Si el partido ya estaba guardado en el historial, vuelve a generar el prompt para actualizar las cuotas.
+    </div>
+    """, unsafe_allow_html=True)
     st.markdown("""
     Pega tus mercados en formato CSV. El CSV debe contener exactamente estas columnas:
     `Market`, `Odds`, `Probability`, `Risk`, `Uncertainty`, `Type`
@@ -1635,7 +1673,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 """, unsafe_allow_html=True)
                 
                 try:
-                    pcts = sorted([float(p.strip()) / 100.0 for p in strategy_str.split("/")], reverse=True)
+                    pcts = sorted([float(p.replace("%", "").strip()) / 100.0 for p in strategy_str.split("/")], reverse=True)
                 except Exception:
                     pcts = [1.0 / M] * M
                     
@@ -1662,13 +1700,13 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                     if rec["combined_bet"]:
                         role_text = "Apuesta combinada:"
                         legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in rec["legs"]]
-                        legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+                        legs_html = f"<div style='font-size: 14px; color: #a0aec0; margin-bottom: 4px;'><b>Apuestas:</b></div><ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
                     else:
                         role_text = f"{role}:"
-                        legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{translated_market}</div>"
-
+                        legs_html = f"<div style='margin-bottom: 8px; font-size: 14px; color: #a0aec0;'><b>Apuesta:</b> <span style='color: #ffffff; font-weight: bold;'>{translated_market}</span></div>"
+ 
                     rel_text = get_probability_benefit_relation(rec["probability"], rec["odds"])
-
+ 
                     st.markdown(f"""
                     <div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
                         <div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">{role_text}</div>
@@ -1679,7 +1717,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                             <div><b>Importe apostado:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
                             <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
                             <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
-                            <div style="grid-column: span 2;"><b>Relación:</b> <span style="color: #ffd400;">{rel_text}</span></div>
+                            <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400;">{rel_text}</span></div>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1724,10 +1762,13 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 """, unsafe_allow_html=True)
 
             # Final summary
-            if M == 2:
+            if c_num_picks == 1:
+                best_strat = "100%"
+                motive = "Asigna la totalidad del importe a la apuesta con mayor probabilidad de éxito."
+            elif c_num_picks == 2:
                 best_strat = "75 / 25"
                 motive = "Permite asignar una cantidad mayor a la apuesta principal (más probable) mientras se mantiene una cobertura moderada en la apuesta secundaria."
-            else: # M == 3
+            else: # c_num_picks == 3
                 best_strat = "60 / 25 / 15"
                 motive = "Distribuye el capital de forma óptima en tres niveles de probabilidad, maximizando el retorno esperado sin sobreexponer el depósito."
             
@@ -1755,7 +1796,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 return (-x["probability"], -x.get("safety_score", 0.0), -balance)
                 
             mini_summary_bets = sorted(selected_recommendations, key=mini_summary_sort_key)
-            for idx, rec in enumerate(mini_summary_bets[:3]):
+            for idx, rec in enumerate(mini_summary_bets[:c_num_picks]):
                 m_trans = translate_market_to_spanish(rec["market"])
                 rel = get_probability_benefit_relation(rec["probability"], rec["odds"])
                 # We can calculate potential profit for a standard 10 € stake
@@ -1766,9 +1807,9 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 legs_html = ""
                 if rec["combined_bet"]:
                     legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in rec["legs"]]
-                    legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+                    legs_html = f"<div style='font-size: 13px; color: #a0aec0; margin-bottom: 4px;'><b>Apuestas:</b></div><ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
                 else:
-                    legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
+                    legs_html = f"<div style='margin-bottom: 8px; font-size: 13px; color: #a0aec0;'><b>Apuesta:</b> <span style='color: #ffffff; font-weight: bold;'>{m_trans}</span></div>"
                 
                 st.markdown(f"""
                 <div style="background-color: #111111; padding: 15px; border-radius: 8px; border-left: 4px solid #ffd400; margin-bottom: 12px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
@@ -1777,7 +1818,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                         <div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
                         <div><b>Probabilidad de éxito:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0 if rec['probability'] < 1.0 else rec['probability']:.1f}%</span></div>
                         <div><b>Beneficio potencial (por cada 10 €):</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
-                        <div style="grid-column: span 2;"><b>Relación:</b> <span style="color: #ffd400;">{rel}</span></div>
+                        <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400;">{rel}</span></div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2201,6 +2242,141 @@ elif section == "Cartera":
                             break
                     save_portfolio()
                     st.rerun()
+
+    # Manual bet entry form/section (PART 1)
+    st.markdown("---")
+    st.subheader("Añadir apuesta manual")
+    
+    # Extract unique competitions & betting houses from portfolio to offer as selectbox options
+    existing_comps = list(set(b.get("competition", "") for b in st.session_state.portfolio if b.get("competition")))
+    standard_competitions = [
+        "FIFA World Cup 2026",
+        "UEFA Euro",
+        "Copa América",
+        "Africa Cup of Nations",
+        "UEFA Champions League",
+        "UEFA Europa League",
+        "UEFA Conference League",
+        "Premier League",
+        "LaLiga",
+        "Serie A",
+        "Bundesliga",
+        "Ligue 1"
+    ]
+    competition_options = []
+    competition_options.append("FIFA World Cup 2026")
+    for c in standard_competitions:
+        if c not in competition_options:
+            competition_options.append(c)
+    for c in existing_comps:
+        if c not in competition_options:
+            competition_options.append(c)
+    if "Otro" not in competition_options:
+        competition_options.append("Otro")
+
+    existing_houses = list(set(b.get("betting_house", "") for b in st.session_state.portfolio if b.get("betting_house")))
+    standard_houses = ["Winamax", "Bet365", "Codere", "Betfair", "Bwin", "Marathonbet", "1xBet", "Betway", "William Hill", "Pinnacle"]
+    house_options = []
+    for h in standard_houses:
+        if h not in house_options:
+            house_options.append(h)
+    for h in existing_houses:
+        if h not in house_options:
+            house_options.append(h)
+    if "Otro" not in house_options:
+        house_options.append("Otro")
+
+    col_man1, col_man2 = st.columns(2)
+    with col_man1:
+        sport_sel = st.selectbox("Deporte", ["Fútbol", "Baloncesto", "Tenis", "Otro"], index=0, key="manual_sport_sel")
+        if sport_sel == "Otro":
+            sport_val = st.text_input("Especificar deporte", placeholder="Ejemplo: Balonmano", key="manual_sport_custom")
+        else:
+            sport_val = sport_sel
+
+        comp_sel = st.selectbox("Competición", competition_options, index=0, key="manual_comp_sel")
+        if comp_sel == "Otro":
+            competition_val = st.text_input("Especificar competición", placeholder="Ejemplo: Amistoso Internacional", key="manual_comp_custom")
+        else:
+            competition_val = comp_sel
+
+        match_val = st.text_input("Partido / Evento", placeholder="Ejemplo: España - Grupo H", key="manual_match")
+        
+        bet_val = st.text_input("Apuesta", placeholder="Ejemplo: España queda primera de grupo", key="manual_bet_name")
+
+    with col_man2:
+        house_sel = st.selectbox("Casa de apuestas", house_options, index=0, key="manual_house_sel")
+        if house_sel == "Otro":
+            betting_house_val = st.text_input("Especificar casa de apuestas", placeholder="Ejemplo: Sportium", key="manual_house_custom")
+        else:
+            betting_house_val = house_sel
+
+        odds_val = st.number_input("Cuota", min_value=1.01, value=2.00, step=0.01, format="%.2f", key="manual_odds")
+        stake_val = st.number_input("Importe apostado (€)", min_value=0.1, value=10.00, step=1.0, format="%.2f", key="manual_stake")
+        
+        status_val = st.selectbox("Estado", ["Pendiente", "Ganada", "Perdida", "Nula"], index=0, key="manual_status")
+
+    # Automatically calculate potential return and potential profit
+    retorno_potencial = stake_val * odds_val
+    beneficio_potencial = stake_val * (odds_val - 1.0)
+
+    # Show calculations before saving
+    st.markdown(f"""
+    <div style="background-color: #111111; padding: 15px; border-radius: 8px; border: 1px solid #222222; margin-top: 15px; margin-bottom: 15px;">
+        <div style="display: flex; justify-content: space-around; text-align: center;">
+            <div>
+                <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Retorno potencial</div>
+                <div style="font-size: 20px; font-weight: bold; color: #ffffff;">{retorno_potencial:.2f} €</div>
+            </div>
+            <div>
+                <div style="font-size: 12px; color: #a0aec0; text-transform: uppercase;">Beneficio potencial</div>
+                <div style="font-size: 20px; font-weight: bold; color: #00C853;">{beneficio_potencial:.2f} €</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("GUARDAR APUESTA EN CARTERA", use_container_width=True, key="manual_save_bet_btn"):
+        if not match_val.strip():
+            st.error("Por favor, introduce el Partido / Evento.")
+        elif not bet_val.strip():
+            st.error("Por favor, introduce la Apuesta.")
+        else:
+            if status_val == "Ganada":
+                profit_val = stake_val * (odds_val - 1.0)
+            elif status_val == "Perdida":
+                profit_val = -stake_val
+            else:
+                profit_val = 0.0
+                
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            new_manual_bet = {
+                "id": f"manual_{int(time.time())}",
+                "date_placed": now_str,
+                "date_saved": now_str,
+                "sport": sport_val,
+                "competition": competition_val,
+                "match": match_val,
+                "betting_house": betting_house_val,
+                "market": bet_val,
+                "odds": float(odds_val),
+                "stake": float(stake_val),
+                "status": status_val,
+                "potential_return": float(retorno_potencial),
+                "potential_profit": float(beneficio_potencial),
+                "profit": float(profit_val),
+                "combined_bet": False,
+                "legs": []
+            }
+            
+            if "portfolio" not in st.session_state:
+                st.session_state.portfolio = []
+            st.session_state.portfolio.append(new_manual_bet)
+            save_portfolio()
+            st.success("¡Apuesta manual guardada con éxito en la cartera!")
+            time.sleep(0.5)
+            st.rerun()
 
 # ----------------------------------------------------
 # SECCIÓN: ESTADÍSTICAS DEL MODELO
@@ -2808,6 +2984,7 @@ elif section == "Historial de partidos estudiados":
                 <div style="font-size: 16px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{match_name}</div>
                 <div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{comp} ({entry.get('phase', 'Fase de grupos')})</div>
                 <div style="font-size: 13px; color: #ffd400; margin-bottom: 8px;"><b>Presets de mercados:</b> {presets_used}</div>
+                <div style="font-size: 13px; color: #ffcc00; margin-bottom: 8px;"><b>Estado de cuotas:</b> Actualizar antes de apostar</div>
                 <div style="font-size: 13px; color: #00C853;"><b>Últimas recomendaciones:</b> {recs_text}</div>
             </div>
             """, unsafe_allow_html=True)
@@ -2846,7 +3023,7 @@ elif section == "Historial de partidos estudiados":
                     st.success("¡Partido cargado en la calculadora!")
                     st.rerun()
             with col_b2:
-                if st.button("Volver a generar prompt", key=f"hist_prompt_{idx}"):
+                if st.button("ACTUALIZAR CUOTAS Y DATOS", key=f"hist_prompt_{idx}"):
                     cleaned_m = clean_match_name(match_name)
                     presets = entry.get("selected_market_presets", ["Análisis completo"])
                     custom_m = entry.get("custom_markets", "")
@@ -2882,8 +3059,8 @@ elif section == "Historial de partidos estudiados":
                                 markets_list.append(item_clean)
                     p_markets = ", ".join(markets_list)
                     fresh_prompt = f"""Please search current information about the football match "{cleaned_m}" in the "{comp}" ({p_eng} phase).
-Use the most recent available odds and current match information. Do not reuse old odds.
-Review updated odds, lineups, injuries, suspensions, recent form, FIFA ranking or Elo, tactical context, referee if available, corners, cards, goals and shots. Use "{house}" as the betting house preference if possible.
+Use the most recent available current odds and current match information. Do not reuse old odds.
+Review updated current odds, current lineups or probable lineups, injuries, suspensions, recent form, referee if available, cards, corners, goals and shots context. Use "{house}" as the betting house preference if possible.
 
 Based on your research and analysis, estimate probabilities for the following markets: {p_markets}
 
@@ -2891,6 +3068,9 @@ You must return ONLY a CSV with exactly these columns:
 Market,Odds,Probability,Risk,Uncertainty,Type
 
 CSV rules:
+- Use real current odds from the selected betting house if available. If exact odds are not available, use the closest available market odds and increase uncertainty. Do not invent precise odds. If a market does not have a reliable current odd, do not include it in the CSV.
+- Prioritize markets with decimal odds between 1.50 and 2.50, because the app focuses on practical recommended bets, not extreme long shots or very low odds.
+- Return only markets that can realistically be considered for simple or combined betting recommendations.
 - Odds must be in decimal format.
 - Probability must be a number from 0 to 100.
 - Risk must be a number from 0 to 100.
@@ -2901,7 +3081,6 @@ CSV rules:
 - Do not include markets without odds.
 - If data is missing, increase uncertainty.
 - Do not force bets.
-- Only include markets with realistic potential value.
 
 Here is the model formula for context:
 EV* = [(Estimated Probability − λ × Uncertainty − ρ × Risk) × Odds] − 1

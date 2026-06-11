@@ -170,10 +170,22 @@ def get_probability_benefit_relation(probability: float, odds: float) -> str:
         else:
             return "Apuesta conservadora con beneficio bajo"
 
-def classify_bet_type(market: str, combined_bet: bool) -> str:
+def classify_bet_type(market: str, combined_bet: bool = False) -> str:
     if combined_bet:
         return "Combinada"
     m = market.lower()
+    
+    # Spanish and English keywords for group/classification bets
+    group_keywords = [
+        "queda primera", "queda primero", "primera de grupo", "primero de grupo",
+        "gana el grupo", "ganar el grupo", "líder de grupo", "clasifica",
+        "clasificación", "clasificacion", "pasa de grupo", "fase de grupos", "grupo",
+        "group winner", "wins the group", "to win group", "qualify",
+        "qualification", "group stage", "top of group"
+    ]
+    if any(k in m for k in group_keywords):
+        return "Clasificación / Grupo"
+        
     if "goal" in m or "gol" in m or "score" in m:
         return "Goles"
     elif "corner" in m or "córner" in m or "corners" in m:
@@ -182,6 +194,8 @@ def classify_bet_type(market: str, combined_bet: bool) -> str:
         return "Tarjetas"
     elif "handicap" in m or "hándicap" in m or "asiático" in m or "asiatico" in m:
         return "Hándicap"
+    elif "jugador" in m or "tiros jugador" in m or "remates jugador" in m or "tiros de" in m or "remates de" in m:
+        return "Jugador"
     elif "win" in m or "draw" in m or "1x2" in m or "empate" in m or "doble op" in m or "chance" in m or "no bet" in m or "gana" in m:
         return "Resultado"
     else:
@@ -248,7 +262,14 @@ def parse_natural_bet(text: str):
         
     # 5. Bet type using keywords
     bet_type = "Otro"
-    if any(k in text_clean for k in ["queda primera", "primero de grupo", "gana el grupo", "clasifica", "clasificación", "clasificacion"]):
+    group_keywords = [
+        "queda primera", "queda primero", "primera de grupo", "primero de grupo",
+        "gana el grupo", "ganar el grupo", "líder de grupo", "clasifica",
+        "clasificación", "clasificacion", "pasa de grupo", "fase de grupos", "grupo",
+        "group winner", "wins the group", "to win group", "qualify",
+        "qualification", "group stage", "top of group"
+    ]
+    if any(k in text_clean for k in group_keywords):
         bet_type = "Clasificación / Grupo"
     elif any(k in text_clean for k in ["goles", "over", "under", "más de", "menos de", "ambos marcan", "mas de", "menos de"]):
         bet_type = "Goles"
@@ -2201,7 +2222,7 @@ elif section == "Cartera":
 
     # 2. Smart Best Bet Types Insights
     st.subheader("Análisis inteligente de tipos de apuesta")
-    bet_types = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Combinada", "Otro"]
+    bet_types = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
     stats_by_type = {t: {
         "total_bets": 0,
         "closed_bets": 0,
@@ -3249,7 +3270,16 @@ elif section == "Analizar apuesta":
             fair_odds = 1.0 / est_prob_decimal
 
             # Relation
-            if est_prob_pct >= 70.0:
+            if bet_type == "Clasificación / Grupo":
+                if est_prob_pct >= 70.0:
+                    relation = "Alta probabilidad y beneficio moderado"
+                elif est_prob_pct >= 40.0 and risk_label not in ["Arriesgada", "Muy arriesgada"]:
+                    relation = "Probabilidad media con beneficio atractivo"
+                elif est_prob_pct >= 30.0 or risk_label in ["Arriesgada", "Muy arriesgada"]:
+                    relation = "Más riesgo, pero mayor beneficio potencial"
+                else:
+                    relation = "Cuota alta con probabilidad reducida"
+            elif est_prob_pct >= 70.0:
                 relation = "Alta probabilidad y beneficio moderado"
             elif est_prob_pct >= 50.0:
                 relation = "Probabilidad media con beneficio atractivo"
@@ -3278,25 +3308,23 @@ elif section == "Analizar apuesta":
             pot_profit = stake_val * (odds - 1.0)
 
             # Output UI card (PART 7)
-            st.markdown(f"""
-            <div style="background-color: #111111; padding: 22px; border-radius: 12px; border: 1px solid #E30613; margin-top: 20px; margin-bottom: 20px;">
-                <h3 style="color: #E30613; margin: 0 0 15px 0; text-transform: uppercase;">Apuesta analizada</h3>
-                <div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{bet_name}</div>
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; font-size: 14px; color: #a0aec0;">
-                    <div><b>Cuota:</b> <span style="color: #ffffff;">{odds:.2f}</span></div>
-                    <div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{est_prob_pct:.1f}%</span></div>
-                    <div><b>Cuota justa aprox.:</b> <span style="color: #ffffff;">{fair_odds:.2f}</span></div>
-                    <div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{bet_type}</span></div>
-                    <div><b>Nivel de riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
-                    <div><b>Perfil:</b> <span style="color: #ffffff;">{profile}</span></div>
-                    <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400; font-weight: bold;">{relation}</span></div>
-                    <div><b>Importe detectado:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
-                    <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
-                    <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            html_card = f"""<div style="background-color: #111111; padding: 22px; border-radius: 12px; border: 1px solid #E30613; margin-top: 20px; margin-bottom: 20px;">
+<h3 style="color: #E30613; margin: 0 0 15px 0; text-transform: uppercase;">Apuesta analizada</h3>
+<div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{bet_name}</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; font-size: 14px; color: #a0aec0;">
+<div><b>Cuota:</b> <span style="color: #ffffff;">{odds:.2f}</span></div>
+<div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{est_prob_pct:.1f}%</span></div>
+<div><b>Cuota justa aprox.:</b> <span style="color: #ffffff;">{fair_odds:.2f}</span></div>
+<div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{bet_type}</span></div>
+<div><b>Nivel de riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
+<div><b>Perfil:</b> <span style="color: #ffffff;">{profile}</span></div>
+<div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400; font-weight: bold;">{relation}</span></div>
+<div><b>Importe detectado:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
+<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
+<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+</div>
+</div>"""
+            st.markdown(html_card, unsafe_allow_html=True)
 
             # Actions (PART 8)
             col_act1, col_act2 = st.columns(2)
@@ -3636,7 +3664,7 @@ elif section == "Evolución del saldo":
             
     exp2 = st.expander("Detalle por tipo de apuesta")
     with exp2:
-        bet_types = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Combinada", "Otro"]
+        bet_types = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
         stats_by_type = {t: {
             "total_bets": 0,
             "closed_bets": 0,

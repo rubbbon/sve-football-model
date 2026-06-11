@@ -555,7 +555,7 @@ def render_altair_chart(df):
 st.set_page_config(
     page_title="CALCULADORA DE APUESTAS",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Initialize session state keys safely at startup
@@ -754,19 +754,20 @@ div[data-testid="stMetricLabel"] {
 }
 
 /* Home Navigation Card Grid styling */
-div.element-container:has(.home-card) {
+div.element-container:has(.home-card-marker) {
     display: none !important;
 }
 
-div.element-container:has(.home-card) + div.element-container div.stButton > button {
+div.element-container:has(.home-card-marker) + div.element-container div.stButton > button {
     background-color: #0b0b0b !important;
     color: #E30613 !important;
     border: 1px solid #E30613 !important;
     border-radius: 12px !important;
-    font-size: 18px !important;
+    font-size: 24px !important;
     font-weight: 800 !important;
-    padding: 2.5rem 1.5rem !important;
+    padding: 2rem 1rem !important;
     width: 100% !important;
+    height: 220px !important;
     text-transform: uppercase !important;
     letter-spacing: 1px !important;
     transition: all 0.3s ease !important;
@@ -775,10 +776,9 @@ div.element-container:has(.home-card) + div.element-container div.stButton > but
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    min-height: 160px !important;
 }
 
-div.element-container:has(.home-card) + div.element-container div.stButton > button:hover {
+div.element-container:has(.home-card-marker) + div.element-container div.stButton > button:hover {
     background-color: #E30613 !important;
     color: #ffffff !important;
     box-shadow: 0 0 25px rgba(227, 6, 19, 0.6) !important;
@@ -790,110 +790,10 @@ div.element-container:has(.top-header-marker) {
     display: none !important;
 }
 
-div.element-container:has(.top-header-marker) + div.element-container {
-    position: fixed !important;
-    top: 15px !important;
-    z-index: 999999 !important;
-    width: auto !important;
-}
-
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button {
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    font-size: 14px !important;
-    font-weight: bold !important;
-    cursor: pointer !important;
-    text-transform: none !important;
-    letter-spacing: 0px !important;
-    height: auto !important;
-    min-height: auto !important;
-    line-height: normal !important;
-}
-
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button::before {
-    content: "" !important;
-}
-
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:hover,
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:focus,
-div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:active {
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    color: #ffffff !important;
-    text-decoration: underline !important;
-}
-
-/* Sidebar button styling */
-section[data-testid="stSidebar"] div.stButton > button {
-    color: #E30613 !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    font-size: 16px !important;
-    font-weight: bold !important;
-    text-align: left !important;
-    justify-content: flex-start !important;
-    padding: 8px 16px !important;
-    margin: 4px 0 !important;
-    min-height: 0 !important;
-    width: 100% !important;
-    text-transform: none !important;
-    letter-spacing: 0px !important;
-    transition: color 0.2s ease !important;
-}
-
-section[data-testid="stSidebar"] div.stButton > button:hover {
-    color: #ffffff !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-section[data-testid="stSidebar"] div.stButton > button:focus,
-section[data-testid="stSidebar"] div.stButton > button:active,
-section[data-testid="stSidebar"] div.stButton > button:focus-visible {
-    color: #E30613 !important;
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    outline: none !important;
-}
-
-/* Specific styling for the hamburger button (the first button in the sidebar) */
-section[data-testid="stSidebar"] div.stButton:first-of-type > button {
-    background-color: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    width: 40px !important;
-    height: 40px !important;
-    padding: 0 !important;
-    min-height: 0 !important;
-    margin-left: 16px !important;
-    margin-bottom: 20px !important;
-}
-
-section[data-testid="stSidebar"] div.stButton:first-of-type > button p,
-section[data-testid="stSidebar"] div.stButton:first-of-type > button div,
-section[data-testid="stSidebar"] div.stButton:first-of-type > button span {
+div.element-container:has(.hamburger-marker),
+div.element-container:has(.sidebar-active-marker),
+div.element-container:has(.sidebar-inactive-marker) {
     display: none !important;
-}
-
-section[data-testid="stSidebar"] div.stButton:first-of-type > button::before {
-    content: "" !important;
-    display: block !important;
-    width: 24px !important;
-    height: 16px !important;
-    background: linear-gradient(
-        to bottom,
-        #E30613 0%, #E30613 20%,
-        transparent 20%, transparent 40%,
-        #E30613 40%, #E30613 60%,
-        transparent 60%, transparent 80%,
-        #E30613 80%, #E30613 100%
-    ) !important;
 }
 
 /* Metric / Insight Cards */
@@ -1018,18 +918,7 @@ section[data-testid="stSidebar"] div[role="radiogroup"] label[data-checked="true
 </style>
 """, unsafe_allow_html=True)
 
-# 1.5. Dynamic sidebar visibility based on active section
-if st.session_state.get("current_section", "Inicio") == "Inicio":
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] {
-        display: none !important;
-    }
-    [data-testid="collapsedControl"] {
-        display: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+
 
 # 1. Page Intro Animation
 if "intro_seen" not in st.session_state:
@@ -1091,15 +980,13 @@ else:
     bal_color = "#ffffff"
 
 # 3. Top Left User Box Layout (Clickable balance text positioned dynamically based on sidebar state)
-if st.session_state.get("current_section", "Inicio") == "Inicio":
-    left_pos = "20px"
-elif st.session_state.get("sidebar_open", True):
+if st.session_state.get("sidebar_open", True):
     left_pos = "280px"
 else:
     left_pos = "100px"
 
-st.markdown('<div class="top-header-marker"></div>', unsafe_allow_html=True)
 st.markdown(f"""
+<div class="top-header-marker"></div>
 <style>
 div.element-container:has(.top-header-marker) + div.element-container {{
     position: fixed !important;
@@ -1110,6 +997,29 @@ div.element-container:has(.top-header-marker) + div.element-container {{
 }}
 div.element-container:has(.top-header-marker) + div.element-container div.stButton > button {{
     color: {bal_color} !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    cursor: pointer !important;
+    text-transform: none !important;
+    letter-spacing: 0px !important;
+    height: auto !important;
+    min-height: auto !important;
+    line-height: normal !important;
+}}
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:hover,
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:focus,
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:active,
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:focus-visible {{
+    color: {bal_color} !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    text-decoration: underline !important;
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -1140,6 +1050,9 @@ if st.session_state.sidebar_open:
         min-width: 260px !important;
         max-width: 260px !important;
     }
+    section[data-testid="stSidebar"] button[kind="header"] {
+        display: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 else:
@@ -1150,7 +1063,6 @@ else:
         min-width: 80px !important;
         max-width: 80px !important;
     }
-    /* Hide default streamlit collapse button in sidebar header when custom hamburger is collapsed */
     section[data-testid="stSidebar"] button[kind="header"] {
         display: none !important;
     }
@@ -1158,7 +1070,41 @@ else:
     """, unsafe_allow_html=True)
 
 # First button is styled as hamburger icon
-if st.sidebar.button("☰", key="hamburger_btn"):
+st.sidebar.markdown("""
+<div class="hamburger-marker"></div>
+<style>
+div.element-container:has(.hamburger-marker) + div.element-container div.stButton > button {
+    color: #E30613 !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 28px !important;
+    font-weight: bold !important;
+    padding: 0 !important;
+    width: 40px !important;
+    height: 40px !important;
+    min-height: 0 !important;
+    margin-left: 16px !important;
+    margin-bottom: 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+}
+div.element-container:has(.hamburger-marker) + div.element-container div.stButton > button:hover,
+div.element-container:has(.hamburger-marker) + div.element-container div.stButton > button:focus,
+div.element-container:has(.hamburger-marker) + div.element-container div.stButton > button:active,
+div.element-container:has(.hamburger-marker) + div.element-container div.stButton > button:focus-visible {
+    color: #ff3b30 !important;
+    background-color: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+if st.sidebar.button("☰", key="hamburger_menu_btn"):
     st.session_state.sidebar_open = not st.session_state.sidebar_open
     st.rerun()
 
@@ -1171,25 +1117,46 @@ if st.session_state.sidebar_open:
         "Evolución del saldo",
     ]
     for sec in visible_sections:
+        is_selected = (st.session_state.current_section == sec)
+        marker_class = "sidebar-active-marker" if is_selected else "sidebar-inactive-marker"
+        underline_style = "text-decoration: underline !important; text-decoration-color: #E30613 !important; text-decoration-thickness: 2px !important; text-underline-offset: 6px !important;" if is_selected else ""
+        
+        st.sidebar.markdown(f"""
+        <div class="{marker_class}"></div>
+        <style>
+        div.element-container:has(.{marker_class}) + div.element-container div.stButton > button {{
+            color: #E30613 !important;
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-size: 16px !important;
+            font-weight: bold !important;
+            text-align: left !important;
+            justify-content: flex-start !important;
+            padding: 8px 16px !important;
+            margin: 4px 0 !important;
+            min-height: 0 !important;
+            width: 100% !important;
+            text-transform: none !important;
+            letter-spacing: 0px !important;
+            cursor: pointer !important;
+            {underline_style}
+        }}
+        div.element-container:has(.{marker_class}) + div.element-container div.stButton > button:hover,
+        div.element-container:has(.{marker_class}) + div.element-container div.stButton > button:focus,
+        div.element-container:has(.{marker_class}) + div.element-container div.stButton > button:active,
+        div.element-container:has(.{marker_class}) + div.element-container div.stButton > button:focus-visible {{
+            color: #ff3b30 !important;
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+        
         if st.sidebar.button(sec, key=f"nav_btn_{sec}"):
             navigate_to_section(sec)
-            
-    # Underline active section
-    try:
-        active_index = visible_sections.index(st.session_state.current_section) + 2
-    except ValueError:
-        active_index = 2
-        
-    st.markdown(f"""
-    <style>
-    section[data-testid="stSidebar"] div[data-testid="element-container"]:nth-of-type({active_index}) button {{
-        text-decoration: underline !important;
-        text-decoration-color: #E30613 !important;
-        text-decoration-thickness: 2px !important;
-        text-underline-offset: 6px !important;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
 
 section = st.session_state.current_section
 
@@ -1251,24 +1218,22 @@ def clean_match_name(text):
 # SECCIÓN: INICIO
 # ----------------------------------------------------
 if section == "Inicio":
+    st.markdown('<div style="margin-top: 40px;"></div>', unsafe_allow_html=True)
     col_h1, col_h2, col_h3 = st.columns(3)
     with col_h1:
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        st.markdown('<div class="home-card-marker"></div>', unsafe_allow_html=True)
         if st.button("CALCULADORA", key="h_btn_calc"):
             navigate_to_section("Calculadora")
-        st.markdown('</div>', unsafe_allow_html=True)
         
     with col_h2:
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        st.markdown('<div class="home-card-marker"></div>', unsafe_allow_html=True)
         if st.button("ANALIZAR APUESTA", key="h_btn_quick"):
             navigate_to_section("Analizar apuesta")
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with col_h3:
-        st.markdown('<div class="home-card">', unsafe_allow_html=True)
+        st.markdown('<div class="home-card-marker"></div>', unsafe_allow_html=True)
         if st.button("CARTERA", key="h_btn_cart"):
             navigate_to_section("Cartera")
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------
 # SECCIÓN: CALCULADORA
@@ -2432,7 +2397,7 @@ elif section == "Cartera":
     # 4. List of Placed Bets (Realizadas)
     st.subheader("Historial de apuestas en cartera")
     if not portfolio:
-        st.info("No tienes apuestas en tu cartera. Para añadir una apuesta, ve a la pestaña de 'Favoritas' y haz clic en 'Marcar como realizada'.")
+        st.info("No tienes apuestas en tu cartera. Puedes añadir apuestas desde la Calculadora, el Analizador o mediante el formulario de registro manual a continuación.")
     else:
         placed_bets = sorted(portfolio, key=lambda x: x.get("date_placed", ""), reverse=True)
         for idx, bet in enumerate(placed_bets):

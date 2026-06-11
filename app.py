@@ -578,16 +578,20 @@ div[data-testid="stMetricLabel"] {
     color: #E30613 !important;
     border: 1px solid #E30613 !important;
     border-radius: 8px !important;
-    font-size: 18px !important;
+    font-size: 16px !important;
     font-weight: 700 !important;
-    padding: 1.5rem 1rem !important;
-    height: 100px !important;
+    padding: 1rem !important;
     width: 100% !important;
+    aspect-ratio: 1 / 1 !important;
+    max-width: 220px !important;
+    margin: 0 auto !important;
     text-align: center !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
     transition: all 0.3s ease !important;
+    white-space: normal !important;
+    word-break: break-word !important;
 }
 .home-card div.stButton > button:hover {
     background-color: #E30613 !important;
@@ -597,32 +601,46 @@ div[data-testid="stMetricLabel"] {
 }
 
 /* Top Right User Profile Styling */
-.top-user-box {
-    text-align: right;
-    padding: 10px;
-    background-color: #111111;
-    border: 1px solid #222222;
-    border-radius: 8px;
-    margin-top: 10px;
+div.element-container:has(.top-header-marker) {
+    display: none !important;
 }
-.top-user-box div.stButton > button {
-    background-color: transparent !important;
-    color: #E30613 !important;
-    border: 1px solid #E30613 !important;
-    border-radius: 4px !important;
-    padding: 2px 10px !important;
-    font-size: 11px !important;
-    font-weight: bold !important;
+
+div.element-container:has(.top-header-marker) + div.element-container {
+    position: fixed !important;
+    top: 15px !important;
+    right: 20px !important;
+    z-index: 999999 !important;
     width: auto !important;
+}
+
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button {
+    background-color: #111111 !important;
+    border: 1px solid #222222 !important;
+    border-radius: 8px !important;
+    padding: 6px 16px !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5) !important;
+    cursor: pointer !important;
     text-transform: none !important;
     letter-spacing: 0px !important;
-    margin-left: auto !important;
-    display: block !important;
-    margin-top: 5px !important;
+    transition: all 0.3s ease !important;
+    height: auto !important;
+    min-height: auto !important;
+    line-height: normal !important;
 }
-.top-user-box div.stButton > button:hover {
-    background-color: #E30613 !important;
+
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button::before {
+    content: "Usuario | ";
+    color: #a0aec0 !important;
+    font-weight: bold !important;
+    margin-right: 2px !important;
+}
+
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button:hover {
+    border-color: #E30613 !important;
     color: #ffffff !important;
+    box-shadow: 0 0 10px rgba(227,6,19,0.3) !important;
 }
 
 /* Metric / Insight Cards */
@@ -804,41 +822,19 @@ bal_val = metrics_glob["saldo_total"]
 bal_sign = "+" if bal_val > 0 else ""
 bal_color = "#00C853" if bal_val > 0 else ("#FF3B3B" if bal_val < 0 else "#ffffff")
 
-# 3. Top Right User Box Layout (Clickable balance text)
-col_empty, col_user = st.columns([3, 1.5])
-with col_user:
-    st.markdown(f"""
-    <style>
-    .balance-btn div.stButton > button {{
-        background-color: transparent !important;
-        color: {bal_color} !important;
-        border: none !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        font-size: 14px !important;
-        font-weight: bold !important;
-        text-transform: none !important;
-        letter-spacing: 0px !important;
-        box-shadow: none !important;
-        cursor: pointer !important;
-        width: auto !important;
-    }}
-    .balance-btn div.stButton > button:hover {{
-        color: #E30613 !important;
-        background-color: transparent !important;
-        text-decoration: underline !important;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('<div class="top-user-box" style="display: flex; align-items: center; justify-content: flex-end;">', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 14px; color: #a0aec0; font-weight: bold; margin-right: 5px;">Usuario | </div>', unsafe_allow_html=True)
-    st.markdown('<div class="balance-btn">', unsafe_allow_html=True)
-    if st.button(f"Saldo: {bal_sign}{bal_val:.2f} €", key="top_clickable_balance_btn"):
-        st.session_state.current_section = "Evolución del saldo"
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+# 3. Top Right User Box Layout (Clickable balance text positioned via CSS)
+st.markdown('<div class="top-header-marker"></div>', unsafe_allow_html=True)
+st.markdown(f"""
+<style>
+div.element-container:has(.top-header-marker) + div.element-container div.stButton > button {{
+    color: {bal_color} !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+if st.button(f"Saldo: {bal_sign}{bal_val:.2f} €", key="top_clickable_balance_btn"):
+    st.session_state.current_section = "Evolución del saldo"
+    st.rerun()
 
 # 4. Main Title Section (Centered on Inicio, Left-aligned on others)
 if st.session_state.current_section == "Inicio":

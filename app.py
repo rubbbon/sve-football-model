@@ -1551,11 +1551,327 @@ Please be conservative with:
         """
         components.html(copy_button_html, height=75)
 
-    # 1. Entrada CSV de mercados
-    st.header("1. Entrada CSV de mercados")
+    # Helper functions for flexible parser and calculator logic
+    def parse_boosted_line(line):
+        line_norm = re.sub(r'\b(\d+),(\d+)\b', r'\1.\2', line.lower())
+        m = re.search(r'de\s+(?:cuota\s+)?(\d+(?:\.\d+)?)\s+a\s+(?:cuota\s+)?(\d+(?:\.\d+)?)', line_norm)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+        m = re.search(r'antes\s+(\d+(?:\.\d+)?)\s+ahora\s+(\d+(?:\.\d+)?)', line_norm)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+        m = re.search(r'(?:original|antes)\s+(\d+(?:\.\d+)?).*(?:mejorada|ahora|a)\s+(\d+(?:\.\d+)?)', line_norm)
+        if m:
+            return float(m.group(1)), float(m.group(2))
+        boost_keywords = ["superaumento", "super aumento", "cuota aumentada", "cuota mejorada", "boost", "boosted", "superboost", "supercuota", "promo", "promoción", "promocion"]
+        if any(k in line_norm for k in boost_keywords):
+            numbers = re.findall(r'\b\d+(?:\.\d+)?\b', line_norm)
+            odds_candidates = []
+            for num in numbers:
+                try:
+                    val = float(num)
+                    if 1.01 <= val <= 30.0:
+                        odds_candidates.append(val)
+                except ValueError:
+                    pass
+            if len(odds_candidates) >= 2:
+                return odds_candidates[0], odds_candidates[1]
+        return None
+
+    def extract_boosted_market(line):
+        line_clean = line
+        line_clean = re.sub(r'(?i)pasa\s+de\s+(?:cuota\s+)?\d+(?:[.,]\d+)?\s+a\s+(?:cuota\s+)?\d+(?:[.,]\d+)?', '', line_clean)
+        line_clean = re.sub(r'(?i)de\s+(?:cuota\s+)?\d+(?:[.,]\d+)?\s+a\s+(?:cuota\s+)?\d+(?:[.,]\d+)?', '', line_clean)
+        line_clean = re.sub(r'(?i)antes\s+\d+(?:[.,]\d+)?\s+ahora\s+\d+(?:[.,]\d+)?', '', line_clean)
+        line_clean = re.sub(r'(?i)(?:original|antes)\s+\d+(?:[.,]\d+)?.*(?:mejorada|ahora|a)\s+\d+(?:[.,]\d+)?', '', line_clean)
+        boost_keywords = ["superaumento", "super aumento", "cuota aumentada", "cuota mejorada", "boost", "boosted", "superboost", "supercuota", "promo", "promoción", "promocion"]
+        for k in boost_keywords:
+            line_clean = re.sub(r'(?i)\b' + k + r'\b', '', line_clean)
+        line_clean = re.sub(r'(?i)\b\d+\s*(?:euros|euro|eur|€)\b', '', line_clean)
+        line_clean = re.sub(r'(?i)\ben\s+\w+\b', '', line_clean)
+        line_clean = re.sub(r'\s+', ' ', line_clean).strip()
+        line_clean = line_clean.strip(',').strip().strip(',').strip()
+        return line_clean
+
+    def parse_flexible_input(text):
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        if not lines:
+            return []
+        is_csv = False
+        header_cols = [c.strip().lower() for c in lines[0].split(',')]
+        if "market" in header_cols and "odds" in header_cols:
+            is_csv = True
+        parsed_items = []
+        if is_csv:
+            import csv
+            reader = csv.DictReader(lines)
+            for row in reader:
+                try:
+                    row_clean = {k.strip().lower(): v.strip() for k, v in row.items() if k}
+                    market = row_clean.get("market", "")
+                    odds_str = row_clean.get("odds", "1.0").replace(",", ".")
+                    odds = float(odds_str)
+                    prob = None
+                    if "probability" in row_clean:
+                        prob = float(row_clean["probability"].replace("%", ""))
+                    risk = None
+                    if "risk" in row_clean:
+                        risk = float(row_clean["risk"].replace("%", ""))
+                    unc = None
+                    if "uncertainty" in row_clean:
+                        unc = float(row_clean["uncertainty"].replace("%", ""))
+                    parsed_items.append({
+                        "market": market,
+                        "odds": odds,
+                        "probability_provided": prob,
+                        "risk_provided": risk,
+                        "uncertainty_provided": unc,
+                        "type": row_clean.get("type", "Medium").strip()
+                    })
+                except Exception:
+                    pass
+        else:
+            for line in lines:
+                if line.lower().startswith("market,") or line.lower().startswith("market;"):
+                    continue
+                boosted = parse_boosted_line(line)
+                if boosted:
+                    orig_odds, boost_odds = boosted
+                    market_name = extract_boosted_market(line)
+                    parsed_items.append({
+                        "market": market_name,
+                        "odds": boost_odds,
+                        "original_odds": orig_odds,
+                        "is_boosted": True,
+                        "probability_provided": None,
+                        "risk_provided": None,
+                        "uncertainty_provided": None,
+                        "type": "Low"
+                    })
+                    continue
+                line_norm = re.sub(r'\b(\d+),(\d+)\b', r'\1.\2', line)
+                parts = []
+                if "," in line_norm:
+                    parts = [p.strip() for p in line_norm.split(",") if p.strip()]
+                elif ";" in line_norm:
+                    parts = [p.strip() for p in line_norm.split(";") if p.strip()]
+                else:
+                    tokens = line_norm.split()
+                    num_tokens = []
+                    market_tokens = []
+                    for tok in reversed(tokens):
+                        tok_clean = tok.replace("%", "").strip()
+                        try:
+                            float(tok_clean)
+                            num_tokens.insert(0, tok_clean)
+                        except ValueError:
+                            market_tokens = tokens[:tokens.index(tok)+1]
+                            break
+                    if market_tokens:
+                        parts = [" ".join(market_tokens)] + num_tokens
+                    else:
+                        parts = [line_norm]
+                if len(parts) >= 2:
+                    market = parts[0]
+                    try:
+                        odds = float(parts[1])
+                        prob = None
+                        risk = None
+                        unc = None
+                        if len(parts) >= 3:
+                            prob = float(parts[2].replace("%", ""))
+                        if len(parts) >= 4:
+                            risk = float(parts[3].replace("%", ""))
+                        if len(parts) >= 5:
+                            unc = float(parts[4].replace("%", ""))
+                        parsed_items.append({
+                            "market": market,
+                            "odds": odds,
+                            "probability_provided": prob,
+                            "risk_provided": risk,
+                            "uncertainty_provided": unc,
+                            "type": "Medium"
+                        })
+                    except Exception:
+                        pass
+                elif len(parts) == 1:
+                    tokens = line_norm.split()
+                    if len(tokens) >= 2:
+                        try:
+                            odds = float(tokens[-1])
+                            market = " ".join(tokens[:-1])
+                            parsed_items.append({
+                                "market": market,
+                                "odds": odds,
+                                "probability_provided": None,
+                                "risk_provided": None,
+                                "uncertainty_provided": None,
+                                "type": "Medium"
+                            })
+                        except Exception:
+                            pass
+        return parsed_items
+
+    def is_safe_market_type(market: str) -> bool:
+        m_l = market.lower()
+        safe_keywords = [
+            "gana", "win", "doble oportunidad", "double chance", 
+            "empate no válido", "empate no valido", "draw no bet", "dnb",
+            "más de 0.5", "mas de 0.5", "over 0.5",
+            "más de 1.5", "mas de 1.5", "over 1.5",
+            "menos de 4.5", "menos de 4,5", "under 4.5", "under 4,5",
+            "hándicap +", "handicap +", "hándicap", "handicap",
+            "córners", "corners", "tarjetas", "cards", "no red card"
+        ]
+        return any(k in m_l for k in safe_keywords)
+
+    def is_safe_leg(leg) -> bool:
+        odds = leg["odds"]
+        prob = leg["probability"]
+        risk = leg["risk"]
+        unc = leg["uncertainty"]
+        if 1.10 <= odds <= 1.60 and prob >= 0.68 and risk <= 0.32 and unc <= 0.32:
+            return True
+        if 1.60 <= odds <= 1.80 and prob >= 0.60 and risk <= 0.35 and unc <= 0.35:
+            return True
+        return False
+
+    def are_contradictory(m1: str, m2: str) -> bool:
+        m1_l = m1.lower()
+        m2_l = m2.lower()
+        if ("over" in m1_l and "under" in m2_l) or ("under" in m1_l and "over" in m2_l):
+            nums1 = re.findall(r'\d+(?:\.\d+)?', m1_l)
+            nums2 = re.findall(r'\d+(?:\.\d+)?', m2_l)
+            if nums1 and nums2 and nums1[0] == nums2[0]:
+                type1 = "goals" if "goal" in m1_l or "goles" in m1_l else "corners" if "corner" in m1_l or "córner" in m1_l else ""
+                type2 = "goals" if "goal" in m2_l or "goles" in m2_l else "corners" if "corner" in m2_l or "córner" in m2_l else ""
+                if type1 == type2:
+                    return True
+        if "both teams to score" in m1_l and "both teams to score" in m2_l:
+            if ("yes" in m1_l and "no" in m2_l) or ("no" in m1_l and "yes" in m2_l):
+                return True
+        if "ambos marcan" in m1_l and "ambos marcan" in m2_l:
+            if ("si" in m1_l and "no" in m2_l) or ("no" in m1_l and "si" in m2_l):
+                return True
+        if ("win" in m1_l or "gana" in m1_l) and ("win" in m2_l or "gana" in m2_l):
+            w1 = m1_l.replace("win", "").replace("gana", "").strip()
+            w2 = m2_l.replace("win", "").replace("gana", "").strip()
+            if w1 != w2 and w1 and w2:
+                return True
+        if "win to nil" in m1_l and ("both teams" in m2_l and "yes" in m2_l):
+            return True
+        if "win to nil" in m2_l and ("both teams" in m1_l and "yes" in m1_l):
+            return True
+        if "o empate" in m1_l or "o draw" in m1_l or "double chance" in m1_l or "doble oportunidad" in m1_l:
+            if "gana" in m2_l or "win" in m2_l:
+                team_a = m1_l.split(" o ")[0].strip()
+                team_b = m2_l.replace("gana", "").replace("win", "").strip()
+                if team_a != team_b and team_a and team_b:
+                    return True
+        if "o empate" in m2_l or "o draw" in m2_l or "double chance" in m2_l or "doble oportunidad" in m2_l:
+            if "gana" in m1_l or "win" in m1_l:
+                team_a = m2_l.split(" o ")[0].strip()
+                team_b = m1_l.replace("gana", "").replace("win", "").strip()
+                if team_a != team_b and team_a and team_b:
+                    return True
+        if ("ambos marcan si" in m1_l or "both teams to score yes" in m1_l) and ("menos de 0.5" in m2_l or "under 0.5" in m2_l or "0 goles" in m2_l):
+            return True
+        if ("ambos marcan si" in m2_l or "both teams to score yes" in m2_l) and ("menos de 0.5" in m1_l or "under 0.5" in m1_l or "0 goles" in m1_l):
+            return True
+        if ("under 1.5" in m1_l or "menos de 1.5" in m1_l) and ("over 1.5" in m2_l or "mas de 1.5" in m2_l or "más de 1.5" in m2_l):
+            return True
+        if ("under 1.5" in m2_l or "menos de 1.5" in m2_l) and ("over 1.5" in m1_l or "mas de 1.5" in m1_l or "más de 1.5" in m1_l):
+            return True
+        return False
+
+    def calculate_quality_score(rec):
+        score = rec["probability"] * 100.0
+        score -= rec["risk"] * 30.0
+        score -= rec["uncertainty"] * 30.0
+        odds = rec["odds"]
+        if rec["rec_type"] == "Apuesta ancla del favorito":
+            if 1.10 <= odds <= 1.60:
+                score += 10.0
+            else:
+                score -= 10.0
+        else:
+            if 1.70 <= odds <= 2.20:
+                score += 15.0
+                dist_1_90 = abs(odds - 1.90)
+                score += 5.0 * (1.0 - dist_1_90 / 0.20)
+            elif 1.60 <= odds < 1.70 or 2.20 < odds <= 2.40:
+                score += 5.0
+            elif odds < 1.60:
+                score -= 20.0
+            elif odds > 2.40:
+                score -= 25.0
+        has_safe_market = any(is_safe_market_type(leg["market"]) for leg in rec["legs"])
+        if has_safe_market:
+            score += 5.0
+        if rec.get("is_boosted", False) and rec.get("original_odds"):
+            orig = rec["original_odds"]
+            boost = rec["odds"]
+            improvement = (boost - orig) / orig
+            score += 30.0 + 20.0 * improvement
+        return score
+
+    def are_correlated(rec1, rec2) -> bool:
+        legs1 = rec1["legs"]
+        legs2 = rec2["legs"]
+        for l1 in legs1:
+            for l2 in legs2:
+                lbl1 = l1["market"].lower()
+                lbl2 = l2["market"].lower()
+                if lbl1 == lbl2:
+                    return True
+                words1 = set(re.findall(r'\b\w+\b', lbl1))
+                words2 = set(re.findall(r'\b\w+\b', lbl2))
+                stopwords = {"de", "el", "la", "los", "o", "no", "si", "yes", "no", "over", "under", "mas", "menos", "goles", "goals", "corners", "córners", "tarjetas", "cards"}
+                shared_teams = (words1 & words2) - stopwords
+                if shared_teams:
+                    outcome_words = {"gana", "win", "empate", "draw", "goles", "goals", "marcan", "score", "no valido", "no válido"}
+                    is_out1 = any(ow in lbl1 for ow in outcome_words)
+                    is_out2 = any(ow in lbl2 for ow in outcome_words)
+                    if is_out1 and is_out2:
+                        return True
+        return False
+
+    def generate_explanation(rec):
+        rec_type = rec["rec_type"]
+        odds = rec["odds"]
+        prob = rec["probability"] * 100.0 if rec["probability"] <= 1.0 else rec["probability"]
+        if rec_type == "Apuesta simple segura":
+            return f"Apuesta simple muy conservadora con alta probabilidad estimada ({prob:.0f}%) y cuota equilibrada de {odds:.2f}."
+        elif rec_type == "Apuesta simple con buena cuota":
+            return f"Selección simple que ofrece un retorno atractivo de {odds:.2f} con una probabilidad de acierto razonable del {prob:.0f}%."
+        elif rec_type == "Combinada segura de 2 patas":
+            return f"Combinación de dos mercados muy seguros con cuota acumulada de {odds:.2f} dentro de nuestro rango objetivo."
+        elif rec_type == "Combinada segura de 3 patas":
+            return f"Combinada de tres selecciones conservadoras que suma una cuota final muy atractiva de {odds:.2f} manteniendo el riesgo controlado."
+        elif rec_type == "Superaumento / cuota aumentada":
+            orig = rec.get("original_odds", 1.0)
+            impr = ((odds - orig) / orig) * 100.0
+            return f"Supercuota promocional de gran valor. Pasa de {orig:.2f} a {odds:.2f}, lo que representa una mejora del +{impr:.1f}%."
+        elif rec_type == "Apuesta ancla del favorito":
+            return f"Mercado de alta fiabilidad sobre el favorito del encuentro, ideal como base segura con cuota de {odds:.2f}."
+        elif rec_type == "Combinada conservadora del favorito":
+            return f"Combinada que utiliza una selección fuerte sobre el favorito como ancla y añade otro mercado seguro para alcanzar una cuota de {odds:.2f}."
+        return f"Recomendación seleccionada por su relación probabilidad/beneficio óptima y cuota de {odds:.2f}."
+
+    def get_risk_label(risk_val):
+        if risk_val <= 0.22:
+            return "Bajo"
+        elif risk_val <= 0.32:
+            return "Bajo-Medio"
+        elif risk_val <= 0.45:
+            return "Medio"
+        else:
+            return "Alto"
+
+    # 1. Entrada de mercados o CSV
+    st.header("1. Entrada de mercados o CSV")
     st.markdown("""
-    Pega tus mercados en formato CSV. El CSV debe contener exactamente estas columnas:
-    `Market`, `Odds`, `Probability`, `Risk`, `Uncertainty`, `Type`
+    Pega tus mercados (en formato de texto natural transcrito de capturas o en formato CSV estándar).
     """)
 
     # Default CSV example
@@ -1566,33 +1882,23 @@ Over 8.5 corners,1.85,61,12,10,Medium
 France over 1.5 cards,1.90,60,15,12,Medium"""
 
     csv_input = st.text_area(
-        "Pegar mercados en formato CSV",
+        "Pegar mercados (formato texto o CSV)",
         value=default_csv,
         height=180
     )
 
-    # Process and Validate CSV
-    valid_csv = False
-    df_input = None
+    # Process and Validate Input
+    valid_input = False
+    parsed_items = []
     if csv_input.strip() != "":
         try:
-            df_input = pd.read_csv(StringIO(csv_input))
-            df_input.columns = [c.strip() for c in df_input.columns]
-            required_columns = ["Market", "Odds", "Probability", "Risk", "Uncertainty", "Type"]
-            missing_cols = [col for col in required_columns if col not in df_input.columns]
-            if missing_cols:
-                st.error(f"Error de validación: Al CSV le faltan las columnas: {', '.join(missing_cols)}")
+            parsed_items = parse_flexible_input(csv_input)
+            if not parsed_items:
+                st.warning("No se han detectado mercados o cuotas válidas en la entrada. Por favor, asegúrate de escribir las cuotas al final de cada línea (ej. 'Canada gana 1.84').")
             else:
-                df_input["Odds"] = pd.to_numeric(df_input["Odds"], errors='coerce')
-                df_input["Probability"] = pd.to_numeric(df_input["Probability"], errors='coerce')
-                df_input["Risk"] = pd.to_numeric(df_input["Risk"], errors='coerce')
-                df_input["Uncertainty"] = pd.to_numeric(df_input["Uncertainty"], errors='coerce')
-                if df_input[["Odds", "Probability", "Risk", "Uncertainty"]].isnull().any().any():
-                    st.error("Error de validación: Algunos campos en las columnas numéricas no se pueden convertir a números.")
-                else:
-                    valid_csv = True
+                valid_input = True
         except Exception as e:
-            st.error(f"Error al analizar el archivo CSV: {str(e)}")
+            st.error(f"Error al analizar la entrada: {str(e)}")
 
     # 2. Parámetros y configuración
     st.header("2. Parámetros y configuración")
@@ -1610,28 +1916,14 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             picks_idx = [1, 2, 3].index(curr_picks)
         except ValueError:
             picks_idx = 1
-        num_picks = st.selectbox("Número de apuestas", [1, 2, 3], index=picks_idx, key="config_num_picks")
+        num_picks = st.selectbox("Número de recomendaciones", [1, 2, 3], index=picks_idx, key="config_num_picks")
         
-        if num_picks == 1:
-            strategy_options = ["100%"]
-            default_strategies = ["100%"]
-        elif num_picks == 2:
-            strategy_options = ["50 / 50", "60 / 40", "70 / 30", "75 / 25", "80 / 20"]
-            default_strategies = ["50 / 50", "75 / 25"]
-        else:
-            strategy_options = ["50 / 30 / 20", "60 / 25 / 15", "70 / 20 / 10"]
-            default_strategies = ["50 / 30 / 20", "60 / 25 / 15"]
-            
-        if "config_stake_strategies" in st.session_state:
-            valid_defaults = [s for s in st.session_state.config_stake_strategies if s in strategy_options]
-            if not valid_defaults:
-                valid_defaults = default_strategies
-            st.session_state.config_stake_strategies = valid_defaults
-        else:
-            valid_defaults = default_strategies
-            st.session_state.config_stake_strategies = valid_defaults
-            
-        selected_strategies = st.multiselect("Estrategias de reparto", options=strategy_options, key="config_stake_strategies")
+        try:
+            curr_risk_prof = st.session_state.get("config_risk_profile", "Equilibrado")
+            risk_prof_idx = ["Conservador", "Equilibrado", "Agresivo"].index(curr_risk_prof)
+        except ValueError:
+            risk_prof_idx = 1
+        risk_profile = st.selectbox("Perfil de riesgo", ["Conservador", "Equilibrado", "Agresivo"], index=risk_prof_idx, key="config_risk_profile")
 
     reliability = "Media"
     model_mode = "Equilibrado"
@@ -1645,223 +1937,267 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
 
     # Ejecutar el modelo / Calcular apuestas
     if st.button("CALCULAR APUESTAS", use_container_width=True):
-        if not valid_csv:
-            st.error("No se pueden calcular las apuestas. Por favor, corrige los errores de validación del CSV anteriores.")
+        if not valid_input:
+            st.error("No se pueden calcular las apuestas. Por favor, corrige la entrada de mercados anteriores.")
         else:
-            # Contradiction filter
-            def are_contradictory(m1: str, m2: str) -> bool:
-                m1_l = m1.lower()
-                m2_l = m2.lower()
-                if "both teams to score" in m1_l and "both teams to score" in m2_l:
-                    if ("yes" in m1_l and "no" in m2_l) or ("no" in m1_l and "yes" in m2_l):
-                        return True
-                if "win" in m1_l and "win" in m2_l:
-                    w1 = m1_l.replace("win", "").strip()
-                    w2 = m2_l.replace("win", "").strip()
-                    if w1 != w2 and w1 and w2:
-                        return True
-                if "win to nil" in m1_l and "both teams to score" in m2_l and "yes" in m2_l:
-                    return True
-                if "win to nil" in m2_l and "both teams to score" in m1_l and "yes" in m1_l:
-                    return True
-                if ("over" in m1_l and "under" in m2_l) or ("under" in m1_l and "over" in m2_l):
-                    r1 = m1_l.replace("over", "").replace("under", "").strip()
-                    r2 = m2_l.replace("over", "").replace("under", "").strip()
-                    if r1 == r2:
-                        return True
-                if "handicap" in m1_l and "handicap" in m2_l:
-                    words1 = set(m1_l.split())
-                    words2 = set(m2_l.split())
-                    common_words = words1.intersection(words2)
-                    if ("+" in m1_l and "-" in m2_l) or ("-" in m1_l and "+" in m2_l):
-                        sig_shared = [w for w in common_words if len(w) >= 3 and w not in ["handicap", "hándicap", "asian", "asiático"]]
-                        if sig_shared:
-                            return True
-                return False
-
-            # Simple bet candidates
-            candidates = []
-            under_1_50_markets = []
-            combined_leg_candidates = []
-            
-            for _, row in df_input.iterrows():
-                odds = float(row["Odds"])
-                prob = float(row["Probability"]) / 100.0
-                risk = float(row["Risk"]) / 100.0
-                unc = float(row["Uncertainty"]) / 100.0
-                risk_type = str(row["Type"]).strip()
-
-                # Add simple candidates
-                if (cuota_minima <= odds <= cuota_maxima and 
-                    prob >= 0.45 and 
-                    risk <= 0.35 and 
-                    unc <= 0.35):
-                    
-                    candidates.append({
-                        "combined_bet": False,
-                        "legs": [{"market": row["Market"], "odds": odds, "probability": prob, "risk": risk, "uncertainty": unc, "type": risk_type}],
-                        "market": row["Market"],
-                        "odds": odds,
-                        "probability": prob,
-                        "risk": risk,
-                        "uncertainty": unc,
-                        "type": risk_type,
-                        "safety_score": (prob * 100.0) - (risk * 40.0) - (unc * 40.0)
-                    })
-                
-                # Collect candidates under 1.50 for combined bets when num_picks >= 2
-                if num_picks >= 2:
-                    if odds < 1.50 and prob >= 0.45 and risk <= 0.35 and unc <= 0.35:
-                        under_1_50_markets.append({
-                            "market": row["Market"],
-                            "odds": odds,
-                            "probability": prob,
-                            "risk": risk,
-                            "uncertainty": unc,
-                            "type": risk_type
-                        })
-                
-                # For num_picks == 1, collect any relatively safe legs
-                if num_picks == 1:
-                    if prob >= 0.40 and risk <= 0.35 and unc <= 0.35:
-                        combined_leg_candidates.append({
-                            "market": row["Market"],
-                            "odds": odds,
-                            "probability": prob,
-                            "risk": risk,
-                            "uncertainty": unc,
-                            "type": risk_type
-                        })
-
-            # Combined bet candidates
-            combined_candidates = []
-            if allow_combined:
-                if num_picks == 1 and len(combined_leg_candidates) >= 2:
-                    for i in range(len(combined_leg_candidates)):
-                        for j in range(i + 1, len(combined_leg_candidates)):
-                            m1 = combined_leg_candidates[i]
-                            m2 = combined_leg_candidates[j]
-
-                            if are_contradictory(m1["market"], m2["market"]):
-                                continue
-
-                            c_odds = m1["odds"] * m2["odds"]
-                            c_prob = m1["probability"] * m2["probability"]
-                            c_risk = ((m1["risk"] + m2["risk"]) / 2.0) + 0.05
-                            c_unc = ((m1["uncertainty"] + m2["uncertainty"]) / 2.0) + 0.05
-
-                            if (cuota_minima <= c_odds <= cuota_maxima and 
-                                c_prob >= 0.35 and 
-                                c_risk <= 0.35 and 
-                                c_unc <= 0.35):
-                                
-                                type_map = {"Low": 1, "Medium": 2, "High": 3}
-                                inv_type_map = {1: "Low", 2: "Medium", 3: "High"}
-                                t1 = type_map.get(m1["type"], 2)
-                                t2 = type_map.get(m2["type"], 2)
-                                c_type = inv_type_map[max(t1, t2)]
-
-                                combined_candidates.append({
-                                    "combined_bet": True,
-                                    "legs": [m1, m2],
-                                    "market": f"{m1['market']} + {m2['market']}",
-                                    "odds": c_odds,
-                                    "probability": c_prob,
-                                    "risk": c_risk,
-                                    "uncertainty": c_unc,
-                                    "type": c_type,
-                                    "safety_score": (c_prob * 100.0) - (c_risk * 40.0) - (c_unc * 40.0)
-                                })
-                elif num_picks >= 2 and len(under_1_50_markets) >= 2:
-                    for i in range(len(under_1_50_markets)):
-                        for j in range(i + 1, len(under_1_50_markets)):
-                            m1 = under_1_50_markets[i]
-                            m2 = under_1_50_markets[j]
-
-                            if are_contradictory(m1["market"], m2["market"]):
-                                continue
-
-                            c_odds = m1["odds"] * m2["odds"]
-                            c_prob = m1["probability"] * m2["probability"]
-                            c_risk = ((m1["risk"] + m2["risk"]) / 2.0) + 0.05
-                            c_unc = ((m1["uncertainty"] + m2["uncertainty"]) / 2.0) + 0.05
-
-                            if (cuota_minima <= c_odds <= cuota_maxima and 
-                                c_prob >= 0.35 and 
-                                c_risk <= 0.35 and 
-                                c_unc <= 0.35):
-                                
-                                type_map = {"Low": 1, "Medium": 2, "High": 3}
-                                inv_type_map = {1: "Low", 2: "Medium", 3: "High"}
-                                t1 = type_map.get(m1["type"], 2)
-                                t2 = type_map.get(m2["type"], 2)
-                                c_type = inv_type_map[max(t1, t2)]
-
-                                candidates.append({
-                                    "combined_bet": True,
-                                    "legs": [m1, m2],
-                                    "market": f"{m1['market']} + {m2['market']}",
-                                    "odds": c_odds,
-                                    "probability": c_prob,
-                                    "risk": c_risk,
-                                    "uncertainty": c_unc,
-                                    "type": c_type,
-                                    "safety_score": (c_prob * 100.0) - (c_risk * 40.0) - (c_unc * 40.0)
-                                })
-
-            # Sort and filter top recommendations
-            def cand_sort_key(x):
-                dist_1_80 = abs(x["odds"] - 1.80)
-                return (-x["probability"], -x["safety_score"], x["risk"], x["uncertainty"], dist_1_80)
-
-            def get_rank_score(c):
-                norm_safety = c["safety_score"] / 100.0
-                dist_1_80 = abs(c["odds"] - 1.80)
-                odds_penalty = -dist_1_80 * 0.05
-                score = (
-                    c["probability"] * 0.6 + 
-                    norm_safety * 0.2 - 
-                    c["risk"] * 0.1 - 
-                    c["uncertainty"] * 0.1 + 
-                    odds_penalty
-                )
-                if not c["combined_bet"]:
-                    score += 0.05  # 5% safety premium for simple bets
-                return score
-
-            selected_recommendations = []
-            if num_picks == 1:
-                # Compare best simple vs best combined
-                best_simple = None
-                simple_candidates = [c for c in candidates if not c["combined_bet"]]
-                if simple_candidates:
-                    best_simple = sorted(simple_candidates, key=cand_sort_key)[0]
-
-                best_combined = None
-                if combined_candidates:
-                    best_combined = sorted(combined_candidates, key=cand_sort_key)[0]
-
-                if best_simple and best_combined:
-                    score_simple = get_rank_score(best_simple)
-                    score_combined = get_rank_score(best_combined)
-                    if score_simple >= score_combined:
-                        selected_recommendations.append(best_simple)
+            # 1. Normalize and estimate values for parsed items
+            for item in parsed_items:
+                odds = item["odds"]
+                if item.get("probability_provided") is not None:
+                    prob = item["probability_provided"]
+                    if prob > 1.0:
+                        prob = prob / 100.0
+                else:
+                    if item.get("is_boosted") and item.get("original_odds"):
+                        prob = (1.0 / item["original_odds"]) * 0.94
                     else:
-                        selected_recommendations.append(best_combined)
-                elif best_simple:
-                    selected_recommendations.append(best_simple)
-                elif best_combined:
-                    selected_recommendations.append(best_combined)
-            else:
-                candidates_sorted = sorted(candidates, key=cand_sort_key)
-                used_markets = set()
-                for cand in candidates_sorted:
-                    cand_markets = {leg["market"] for leg in cand["legs"]}
-                    if not (cand_markets & used_markets):
-                        selected_recommendations.append(cand)
-                        used_markets.update(cand_markets)
-                    if len(selected_recommendations) >= num_picks:
-                        break
+                        prob = (1.0 / odds) * 0.94
+                prob = max(0.05, min(0.95, prob))
+                item["probability"] = prob
+                
+                if item.get("risk_provided") is not None:
+                    risk = item["risk_provided"]
+                    if risk > 1.0:
+                        risk = risk / 100.0
+                else:
+                    risk = 0.05 + 0.4 * (1.0 - prob) + 0.3 * (min(5.0, odds) / 5.0)
+                    risk = max(0.05, min(0.95, risk))
+                item["risk"] = risk
+                
+                if item.get("uncertainty_provided") is not None:
+                    unc = item["uncertainty_provided"]
+                    if unc > 1.0:
+                        unc = unc / 100.0
+                else:
+                    unc = 0.05 + 0.2 * (1.0 - prob) + 0.15 * (min(5.0, odds) / 5.0)
+                    unc = max(0.05, min(0.95, unc))
+                item["uncertainty"] = unc
+
+            # 2. Combine legs
+            two_leg_combinations = []
+            for i in range(len(parsed_items)):
+                for j in range(i + 1, len(parsed_items)):
+                    leg1 = parsed_items[i]
+                    leg2 = parsed_items[j]
+                    if are_contradictory(leg1["market"], leg2["market"]):
+                        continue
+                    
+                    c_odds = leg1["odds"] * leg2["odds"]
+                    c_prob = leg1["probability"] * leg2["probability"]
+                    c_risk = (leg1["risk"] + leg2["risk"]) / 2.0 + 0.05
+                    c_unc = (leg1["uncertainty"] + leg2["uncertainty"]) / 2.0 + 0.05
+                    
+                    two_leg_combinations.append({
+                        "combined_bet": True,
+                        "legs": [leg1, leg2],
+                        "market": f"{leg1['market']} + {leg2['market']}",
+                        "odds": c_odds,
+                        "probability": c_prob,
+                        "risk": c_risk,
+                        "uncertainty": c_unc
+                    })
+
+            three_leg_combinations = []
+            for i in range(len(parsed_items)):
+                for j in range(i + 1, len(parsed_items)):
+                    for k in range(j + 1, len(parsed_items)):
+                        leg1 = parsed_items[i]
+                        leg2 = parsed_items[j]
+                        leg3 = parsed_items[k]
+                        if (are_contradictory(leg1["market"], leg2["market"]) or 
+                            are_contradictory(leg1["market"], leg3["market"]) or 
+                            are_contradictory(leg2["market"], leg3["market"])):
+                            continue
+                            
+                        c_odds = leg1["odds"] * leg2["odds"] * leg3["odds"]
+                        c_prob = leg1["probability"] * leg2["probability"] * leg3["probability"]
+                        c_risk = (leg1["risk"] + leg2["risk"] + leg3["risk"]) / 3.0 + 0.10
+                        c_unc = (leg1["uncertainty"] + leg2["uncertainty"] + leg3["uncertainty"]) / 3.0 + 0.10
+                        
+                        three_leg_combinations.append({
+                            "combined_bet": True,
+                            "legs": [leg1, leg2, leg3],
+                            "market": f"{leg1['market']} + {leg2['market']} + {leg3['market']}",
+                            "odds": c_odds,
+                            "probability": c_prob,
+                            "risk": c_risk,
+                            "uncertainty": c_unc
+                        })
+
+            # 3. Classify into candidates
+            # Type 1: Apuesta simple segura
+            type_1_candidates = []
+            for item in parsed_items:
+                if is_safe_leg(item):
+                    type_1_candidates.append({
+                        "rec_type": "Apuesta simple segura",
+                        "combined_bet": False,
+                        "legs": [item],
+                        "market": item["market"],
+                        "odds": item["odds"],
+                        "probability": item["probability"],
+                        "risk": item["risk"],
+                        "uncertainty": item["uncertainty"],
+                        "is_boosted": item.get("is_boosted", False),
+                        "original_odds": item.get("original_odds", None)
+                    })
+
+            # Type 2: Apuesta simple con buena cuota
+            type_2_candidates = []
+            for item in parsed_items:
+                if 1.60 <= item["odds"] <= 2.50 and item["probability"] >= 0.45:
+                    type_2_candidates.append({
+                        "rec_type": "Apuesta simple con buena cuota",
+                        "combined_bet": False,
+                        "legs": [item],
+                        "market": item["market"],
+                        "odds": item["odds"],
+                        "probability": item["probability"],
+                        "risk": item["risk"],
+                        "uncertainty": item["uncertainty"],
+                        "is_boosted": item.get("is_boosted", False),
+                        "original_odds": item.get("original_odds", None)
+                    })
+
+            # Type 3: Combinada segura de 2 patas
+            type_3_candidates = []
+            for combo in two_leg_combinations:
+                if is_safe_leg(combo["legs"][0]) and is_safe_leg(combo["legs"][1]):
+                    type_3_candidates.append({
+                        "rec_type": "Combinada segura de 2 patas",
+                        "combined_bet": True,
+                        "legs": combo["legs"],
+                        "market": combo["market"],
+                        "odds": combo["odds"],
+                        "probability": combo["probability"],
+                        "risk": combo["risk"],
+                        "uncertainty": combo["uncertainty"]
+                    })
+
+            # Type 4: Combinada segura de 3 patas
+            type_4_candidates = []
+            for combo in three_leg_combinations:
+                if is_safe_leg(combo["legs"][0]) and is_safe_leg(combo["legs"][1]) and is_safe_leg(combo["legs"][2]):
+                    type_4_candidates.append({
+                        "rec_type": "Combinada segura de 3 patas",
+                        "combined_bet": True,
+                        "legs": combo["legs"],
+                        "market": combo["market"],
+                        "odds": combo["odds"],
+                        "probability": combo["probability"],
+                        "risk": combo["risk"],
+                        "uncertainty": combo["uncertainty"]
+                    })
+
+            # Type 5: Superaumento / cuota aumentada
+            type_5_candidates = []
+            for item in parsed_items:
+                if item.get("is_boosted", False):
+                    type_5_candidates.append({
+                        "rec_type": "Superaumento / cuota aumentada",
+                        "combined_bet": False,
+                        "legs": [item],
+                        "market": item["market"],
+                        "odds": item["odds"],
+                        "probability": item["probability"],
+                        "risk": item["risk"],
+                        "uncertainty": item["uncertainty"],
+                        "is_boosted": True,
+                        "original_odds": item["original_odds"]
+                    })
+
+            # Type 6: Apuesta ancla del favorito
+            type_6_candidates = []
+            for item in parsed_items:
+                if 1.10 <= item["odds"] <= 1.60 and is_safe_market_type(item["market"]) and is_safe_leg(item):
+                    type_6_candidates.append({
+                        "rec_type": "Apuesta ancla del favorito",
+                        "combined_bet": False,
+                        "legs": [item],
+                        "market": item["market"],
+                        "odds": item["odds"],
+                        "probability": item["probability"],
+                        "risk": item["risk"],
+                        "uncertainty": item["uncertainty"]
+                    })
+
+            # Type 7: Combinada conservadora del favorito
+            type_7_candidates = []
+            for combo in two_leg_combinations + three_leg_combinations:
+                has_favorite_anchor = any(
+                    1.10 <= leg["odds"] <= 1.60 and is_safe_market_type(leg["market"]) and is_safe_leg(leg)
+                    for leg in combo["legs"]
+                )
+                all_legs_safe = all(is_safe_leg(leg) for leg in combo["legs"])
+                if has_favorite_anchor and all_legs_safe:
+                    type_7_candidates.append({
+                        "rec_type": "Combinada conservadora del favorito",
+                        "combined_bet": True,
+                        "legs": combo["legs"],
+                        "market": combo["market"],
+                        "odds": combo["odds"],
+                        "probability": combo["probability"],
+                        "risk": combo["risk"],
+                        "uncertainty": combo["uncertainty"]
+                    })
+
+            all_candidates = type_1_candidates + type_2_candidates + type_3_candidates + type_4_candidates + type_5_candidates + type_6_candidates + type_7_candidates
+            
+            # Calculate scores
+            for cand in all_candidates:
+                cand["score"] = calculate_quality_score(cand)
+                
+            all_candidates_sorted = sorted(all_candidates, key=lambda x: x["score"], reverse=True)
+            
+            unique_candidates = []
+            seen_combinations = set()
+            for cand in all_candidates_sorted:
+                leg_set = frozenset([leg["market"] for leg in cand["legs"]])
+                if leg_set not in seen_combinations:
+                    seen_combinations.add(leg_set)
+                    unique_candidates.append(cand)
+                    
+            # Final Selection with diversification and correlation penalties
+            selected_recommendations = []
+            for _ in range(min(num_picks, len(unique_candidates))):
+                best_cand = None
+                best_score = -999999
+                for cand in unique_candidates:
+                    if cand in selected_recommendations:
+                        continue
+                    current_score = cand["score"]
+                    already_selected_types = [r["rec_type"] for r in selected_recommendations]
+                    if cand["rec_type"] in already_selected_types:
+                        current_score -= 15.0  # Apply type diversification penalty
+                    
+                    # Apply correlation penalty
+                    for sel in selected_recommendations:
+                        if are_correlated(cand, sel):
+                            current_score -= 20.0
+                            
+                    if current_score > best_score:
+                        best_score = current_score
+                        best_cand = cand
+                if best_cand:
+                    selected_recommendations.append(best_cand)
+
+            # Auto stake percentages
+            if num_picks == 1:
+                pcts = [1.0]
+            elif num_picks == 2:
+                if risk_profile == "Conservador":
+                    pcts = [0.70, 0.30]
+                elif risk_profile == "Equilibrado":
+                    pcts = [0.60, 0.40]
+                else: # Agresivo
+                    pcts = [0.50, 0.50]
+            else: # num_picks == 3
+                if risk_profile == "Conservador":
+                    pcts = [0.60, 0.25, 0.15]
+                elif risk_profile == "Equilibrado":
+                    pcts = [0.50, 0.30, 0.20]
+                else: # Agresivo
+                    pcts = [0.40, 0.35, 0.25]
 
             # Store in session state
             st.session_state.calculated_results = {
@@ -1871,7 +2207,8 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                 "betting_house": betting_house,
                 "total_stake": total_stake,
                 "num_picks": num_picks,
-                "selected_strategies": selected_strategies
+                "risk_profile": risk_profile,
+                "percentages": pcts
             }
 
             # Save studied match history entry with CSV and recommendations
@@ -1888,17 +2225,17 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
 
             # Save latest markets for Top cuotas
             st.session_state.latest_markets = []
-            for _, row in df_input.iterrows():
+            for item in parsed_items:
                 st.session_state.latest_markets.append({
                     "Match": match,
                     "BettingHouse": betting_house,
-                    "Market": str(row["Market"]),
-                    "Odds": float(row["Odds"]),
-                    "Probability": float(row["Probability"]),
-                    "Risk": float(row["Risk"]),
-                    "Uncertainty": float(row["Uncertainty"]),
-                    "Type": str(row["Type"]).strip(),
-                    "SafetyScore": float(row["Probability"]) - (float(row["Risk"]) * 0.5) - (float(row["Uncertainty"]) * 0.5)
+                    "Market": item["market"],
+                    "Odds": float(item["odds"]),
+                    "Probability": float(item["probability"]) * 100.0,
+                    "Risk": float(item["risk"]) * 100.0,
+                    "Uncertainty": float(item["uncertainty"]) * 100.0,
+                    "Type": item.get("type", "Medium"),
+                    "SafetyScore": float(item["probability"]) * 100.0 - (float(item["risk"]) * 50.0) - (float(item["uncertainty"]) * 50.0)
                 })
 
             # Auto-scroll script
@@ -1926,131 +2263,133 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
         c_betting_house = res["betting_house"]
         c_total_stake = res["total_stake"]
         c_num_picks = res["num_picks"]
-        selected_strategies = res["selected_strategies"]
+        c_risk_profile = res["risk_profile"]
+        pcts = res["percentages"]
 
         st.markdown("---")
         st.subheader("PLAN DE APUESTAS RECOMENDADO")
 
         M = len(selected_recommendations)
         if M == 0:
-            st.warning("No se pudieron generar apuestas simples o combinadas seguras con los filtros requeridos en el rango de cuota objetivo de 1.50 a 2.50. Intenta cambiar los parámetros.")
+            st.warning("No se pudieron generar apuestas simples o combinadas seguras con los filtros requeridos. Intenta cambiar los parámetros.")
         else:
-            for strat_idx, strategy_str in enumerate(selected_strategies):
-                st.markdown(f"""
-                <div style="border-bottom: 2px solid #E30613; margin-top: 25px; margin-bottom: 15px; padding-bottom: 5px;">
-                    <h3 style="color: #ffffff; margin: 0;">Reparto {strategy_str}</h3>
-                </div>
-                """, unsafe_allow_html=True)
+            rep_label = " / ".join([f"{p*100:.0f}%" for p in pcts[:M]])
+            st.markdown(f"""
+            <div style="border-bottom: 2px solid #E30613; margin-top: 25px; margin-bottom: 15px; padding-bottom: 5px;">
+                <h3 style="color: #ffffff; margin: 0;">Reparto Automático ({c_risk_profile}): {rep_label}</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            total_ret_opt = 0.0
+            total_prof_opt = 0.0
+            
+            for idx, rec in enumerate(selected_recommendations):
+                pct_val = pcts[idx] if idx < len(pcts) else 0.0
+                stake_val = c_total_stake * pct_val
+                pot_return = stake_val * rec["odds"]
+                pot_profit = pot_return - stake_val
                 
-                try:
-                    pcts = sorted([float(p.replace("%", "").strip()) / 100.0 for p in strategy_str.split("/")], reverse=True)
-                except Exception:
-                    pcts = [1.0 / M] * M
-                    
-                total_ret_opt = 0.0
-                total_prof_opt = 0.0
+                total_ret_opt += pot_return
+                total_prof_opt += pot_profit
                 
-                for idx, rec in enumerate(selected_recommendations):
-                    role = "Apuesta principal" if idx == 0 else f"Apuesta secundaria"
-                    if idx > 1:
-                        role = f"Apuesta secundaria {idx}"
-                        
-                    pct_val = pcts[idx] if idx < len(pcts) else 0.0
-                    stake_val = c_total_stake * pct_val
-                    pot_return = stake_val * rec["odds"]
-                    pot_profit = pot_return - stake_val
-                    
-                    total_ret_opt += pot_return
-                    total_prof_opt += pot_profit
-                    
-                    # Translate market to Spanish
+                role_text = f"#{idx+1} — {rec['rec_type']}"
+                
+                legs_html = ""
+                if rec["combined_bet"]:
+                    legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in rec["legs"]]
+                    legs_html = f"<div style='font-size: 14px; color: #a0aec0; margin-bottom: 4px;'><b>Selecciones:</b></div><ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+                else:
                     translated_market = translate_market_to_spanish(rec["market"])
+                    legs_html = f"<div style='margin-bottom: 8px; font-size: 14px; color: #a0aec0;'><b>Apuesta:</b> <span style='color: #ffffff; font-weight: bold;'>{translated_market}</span></div>"
                     
-                    legs_html = ""
-                    if rec["combined_bet"]:
-                        if c_num_picks == 1:
-                            role_text = "Apuesta combinada segura"
-                        else:
-                            role_text = "Apuesta combinada:"
-                        legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in rec["legs"]]
-                        legs_html = f"<div style='font-size: 14px; color: #a0aec0; margin-bottom: 4px;'><b>Apuestas:</b></div><ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
-                    else:
-                        role_text = f"{role}:"
-                        legs_html = f"<div style='margin-bottom: 8px; font-size: 14px; color: #a0aec0;'><b>Apuesta:</b> <span style='color: #ffffff; font-weight: bold;'>{translated_market}</span></div>"
- 
-                    rel_text = get_probability_benefit_relation(rec["probability"], rec["odds"])
- 
-                    html_rec = f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
+                rel_text = get_probability_benefit_relation(rec["probability"], rec["odds"])
+                risk_label = get_risk_label(rec["risk"])
+                explanation = generate_explanation(rec)
+                
+                odds_detail_html = ""
+                if rec.get("is_boosted", False) and rec.get("original_odds"):
+                    orig = rec["original_odds"]
+                    boost = rec["odds"]
+                    improvement = ((boost - orig) / orig) * 100.0
+                    odds_detail_html = f"<div><b>Cuota original:</b> <span style='color: #a0aec0; text-decoration: line-through;'>{orig:.2f}</span> | <b>Cuota mejorada:</b> <span style='color: #00C853; font-weight: bold;'>{boost:.2f} (+{improvement:.1f}%)</span></div>"
+                else:
+                    odds_detail_html = f"<div><b>Cuota total:</b> <span style='color: #ffffff;'>{rec['odds']:.2f}</span></div>"
+
+                html_rec = f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
 <div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">{role_text}</div>
 {legs_html}
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0; margin-top: 10px;">
-<div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
-<div><b>Probabilidad de éxito:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0 if rec['probability'] < 1.0 else rec['probability']:.1f}%</span></div>
-<div><b>Importe apostado:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
+{odds_detail_html}
+<div><b>Probabilidad estimada:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0:.0f}%</span></div>
+<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
+<div><b>Importe recomendado:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
 <div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
 <div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
 <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400;">{rel_text}</span></div>
+<div style="grid-column: span 2;"><b>Motivo:</b> <span style="color: #ffffff; font-style: italic;">{explanation}</span></div>
 </div>
 </div>"""
-                    st.markdown(html_rec, unsafe_allow_html=True)
-                    
-                    is_in_portfolio = any(b.get("market") == rec["market"] and b.get("match") == c_match for b in st.session_state.portfolio)
-                    if is_in_portfolio:
-                        st.button("Guardada en cartera", key=f"save_port_{strat_idx}_{idx}", disabled=True)
-                    else:
-                        if st.button("Guardar en cartera", key=f"save_port_{strat_idx}_{idx}"):
-                            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            new_port_bet = {
-                                "id": f"calc_port_{int(time.time())}_{strat_idx}_{idx}",
-                                "date_placed": now_str,
-                                "date_saved": now_str,
-                                "sport": "Fútbol",
-                                "competition": c_competition,
-                                "match": c_match,
-                                "betting_house": c_betting_house,
-                                "market": rec["market"],
-                                "odds": float(rec["odds"]),
-                                "stake": float(stake_val),
-                                "status": "Pendiente",
-                                "potential_return": float(pot_return),
-                                "potential_profit": float(pot_profit),
-                                "profit": 0.0,
-                                "combined_bet": rec["combined_bet"],
-                                "legs": rec["legs"],
-                                "estimated_probability": float(rec["probability"]),
-                                "risk": rec["risk"],
-                                "type": rec["type"]
-                            }
-                            st.session_state.portfolio.append(new_port_bet)
-                            save_portfolio()
-                            st.success("¡Apuesta guardada con éxito en la cartera!")
-                            st.rerun()
+                st.markdown(html_rec, unsafe_allow_html=True)
+                
+                is_in_portfolio = any(b.get("market") == rec["market"] and b.get("match") == c_match for b in st.session_state.portfolio)
+                if is_in_portfolio:
+                    st.button("Guardada en cartera", key=f"save_port_{idx}", disabled=True)
+                else:
+                    if st.button("Guardar en cartera", key=f"save_port_{idx}"):
+                        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        new_port_bet = {
+                            "id": f"calc_port_{int(time.time())}_{idx}",
+                            "date_placed": now_str,
+                            "date_saved": now_str,
+                            "sport": "Fútbol",
+                            "competition": c_competition,
+                            "match": c_match,
+                            "betting_house": c_betting_house,
+                            "market": rec["market"],
+                            "odds": float(rec["odds"]),
+                            "stake": float(stake_val),
+                            "status": "Pendiente",
+                            "potential_return": float(pot_return),
+                            "potential_profit": float(pot_profit),
+                            "profit": 0.0,
+                            "combined_bet": rec["combined_bet"],
+                            "legs": rec["legs"],
+                            "estimated_probability": float(rec["probability"]),
+                            "risk": risk_label,
+                            "type": rec["rec_type"]
+                        }
+                        if rec.get("is_boosted"):
+                            new_port_bet["is_boosted"] = True
+                            new_port_bet["original_odds"] = float(rec["original_odds"])
+                            
+                        st.session_state.portfolio.append(new_port_bet)
+                        save_portfolio()
+                        st.success("¡Apuesta guardada con éxito en la cartera!")
+                        st.rerun()
 
-                st.markdown(f"""
-                <div style="background-color: #111111; padding: 12px 18px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: bold; color: #ffffff;">Resumen Reparto:</span>
-                    <span style="color: #a0aec0;">Importe total: <b style="color: #ffffff;">{c_total_stake:.2f} €</b></span>
-                    <span style="color: #a0aec0;">Retorno potencial total: <b style="color: #ffffff;">{total_ret_opt:.2f} €</b></span>
-                    <span style="color: #a0aec0;">Beneficio potencial total: <b style="color: #00C853;">{total_prof_opt:.2f} €</b></span>
-                </div>
-                """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style="background-color: #111111; padding: 12px 18px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: bold; color: #ffffff;">Resumen Reparto:</span>
+                <span style="color: #a0aec0;">Importe total: <b style="color: #ffffff;">{c_total_stake:.2f} €</b></span>
+                <span style="color: #a0aec0;">Retorno potencial total: <b style="color: #ffffff;">{total_ret_opt:.2f} €</b></span>
+                <span style="color: #a0aec0;">Beneficio potencial total: <b style="color: #00C853;">{total_prof_opt:.2f} €</b></span>
+            </div>
+            """, unsafe_allow_html=True)
 
             # Final summary
-            if c_num_picks == 1:
-                best_strat = "100%"
-                motive = "Asigna la totalidad del importe a la apuesta con mayor probabilidad de éxito."
-            elif c_num_picks == 2:
-                best_strat = "75 / 25"
-                motive = "Permite asignar una cantidad mayor a la apuesta principal (más probable) mientras se mantiene una cobertura moderada en la apuesta secundaria."
-            else: # c_num_picks == 3
-                best_strat = "60 / 25 / 15"
-                motive = "Distribuye el capital de forma óptima en tres niveles de probabilidad, maximizando el retorno esperado sin sobreexponer el depósito."
+            best_strat = " / ".join([f"{p*100:.0f}%" for p in pcts[:M]])
+            if c_risk_profile == "Conservador":
+                motive = "Minimiza la volatilidad asignando una proporción significativamente mayor a la recomendación de mayor calidad y fiabilidad."
+            elif c_risk_profile == "Equilibrado":
+                motive = "Optimiza la relación rentabilidad/riesgo, balanceando la exposición entre selecciones principales y coberturas secundarias."
+            else: # Agresivo
+                motive = "Maximiza el retorno potencial distribuyendo el capital de forma más uniforme entre las recomendaciones de mayor valor."
             
             st.markdown(f"""
             <div style="background-color: #111111; padding: 20px; border-radius: 10px; border: 2px solid #ffd400; margin-top: 25px; margin-bottom: 20px;">
                 <h3 style="color: #ffd400; margin: 0 0 10px 0;">RESULTADO FINAL</h3>
                 <div style="font-size: 16px; color: #ffffff; margin-bottom: 5px;">
-                    <b>Mejor reparto recomendado:</b> Reparto {best_strat}
+                    <b>Mejor reparto recomendado ({c_risk_profile}):</b> Reparto {best_strat}
                 </div>
                 <div style="font-size: 14px; color: #a0aec0;">
                     <b>Motivo:</b> {motive}
@@ -2065,19 +2404,11 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             </div>
             """, unsafe_allow_html=True)
             
-            def mini_summary_sort_key(x):
-                balance = x["probability"] * (x["odds"] - 1.0)
-                return (-x["probability"], -x.get("safety_score", 0.0), -balance)
-                
-            mini_summary_bets = sorted(selected_recommendations, key=mini_summary_sort_key)
-            for idx, rec in enumerate(mini_summary_bets[:c_num_picks]):
+            for idx, rec in enumerate(selected_recommendations):
                 m_trans = translate_market_to_spanish(rec["market"])
                 rel = get_probability_benefit_relation(rec["probability"], rec["odds"])
-                # We can calculate potential profit for a standard 10 € stake
-                stake_val = 10.0
-                pot_profit = stake_val * (rec["odds"] - 1.0)
+                pot_profit_10 = 10.0 * (rec["odds"] - 1.0)
                 
-                # Setup legs if combined
                 legs_html = ""
                 if rec["combined_bet"]:
                     legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in rec["legs"]]
@@ -2090,8 +2421,8 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                     {legs_html}
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; font-size: 13px; color: #a0aec0; margin-top: 5px;">
                         <div><b>Cuota:</b> <span style="color: #ffffff;">{rec['odds']:.2f}</span></div>
-                        <div><b>Probabilidad de éxito:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0 if rec['probability'] < 1.0 else rec['probability']:.1f}%</span></div>
-                        <div><b>Beneficio potencial (por cada 10 €):</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+                        <div><b>Probabilidad de éxito:</b> <span style="color: #ffffff;">{rec['probability'] * 100.0:.0f}%</span></div>
+                        <div><b>Beneficio (por cada 10 €):</b> <span style="color: #00C853; font-weight: bold;">{pot_profit_10:.2f} €</span></div>
                         <div style="grid-column: span 2;"><b>Relación probabilidad / beneficio:</b> <span style="color: #ffd400;">{rel}</span></div>
                     </div>
                 </div>

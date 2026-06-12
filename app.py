@@ -3652,197 +3652,207 @@ CSV rules:
 # ----------------------------------------------------
 elif section == "Analizar apuesta":
     st.markdown('<div class="big-title">ANALIZAR APUESTA</div>', unsafe_allow_html=True)
-    st.markdown("Escribe los detalles de tu apuesta en lenguaje natural, revisa los datos detectados y obtén un análisis detallado.")
-
-    # Large text area
-    natural_input = st.text_area(
-        "Escribe tu apuesta",
-        placeholder="Ejemplo: España gana a Cabo Verde cuota 2\nEjemplo: España queda primera de grupo cuota 2, 10 euros\nEjemplo: Cabo Verde más de 1.5 tarjetas cuota 1.75",
-        height=150,
-        key="quick_bet_text_input"
+    
+    # Mode Selector
+    analisis_mode = st.radio(
+        "Selecciona el modo de análisis",
+        ["Analizar una apuesta", "Recomendar combinadas"],
+        key="analisis_mode_selector",
+        horizontal=True
     )
+    
+    if analisis_mode == "Analizar una apuesta":
+        st.markdown("Escribe los detalles de tu apuesta en lenguaje natural, revisa los datos detectados y obtén un análisis detallado.")
 
-    # Detectar datos Button
-    if st.button("DETECTAR DATOS", use_container_width=True, key="quick_bet_detect_btn"):
-        if not natural_input.strip():
-            st.error("Por favor, escribe los detalles de la apuesta antes de detectar los datos.")
-        else:
-            parsed = parse_natural_bet(natural_input)
-            st.session_state.quick_bet_detected = parsed
-            st.session_state.quick_bet_final_analysis = None
-            
-            # Setup initial state values for editable widgets
-            st.session_state.q_sport = parsed.get("sport") or "Fútbol"
-            st.session_state.q_comp = parsed.get("competition") or ""
-            st.session_state.q_match = parsed.get("match") or parsed.get("bet_name") or ""
-            st.session_state.q_house = parsed.get("betting_house") or "Winamax"
-            st.session_state.q_market = parsed.get("bet_name") or ""
-            st.session_state.q_type = parsed.get("type") or "Otro"
-            st.session_state.q_is_boosted = parsed.get("is_boosted", False)
-            
-            detected_odds = float(parsed["odds"]) if (parsed.get("odds") and parsed["odds"] > 1.0) else None
-            detected_stake = float(parsed["stake"]) if (parsed.get("stake") and parsed["stake"] > 0.0) else None
-            
-            st.session_state.q_odds = detected_odds if detected_odds else 2.00
-            st.session_state.q_stake = detected_stake if detected_stake else 10.0
-            st.session_state.q_original_odds = float(parsed.get("original_odds")) if parsed.get("original_odds") else (detected_odds if detected_odds else 2.00)
-            
-            # Initial estimations for the form
-            ref_odds = st.session_state.q_original_odds if st.session_state.q_is_boosted else st.session_state.q_odds
-            est_prob_decimal = (1.0 / ref_odds) * 0.94
-            est_prob_decimal = max(0.05, min(0.95, est_prob_decimal))
-            st.session_state.q_prob = float(round(est_prob_decimal * 100.0, 1))
-            
-            if st.session_state.q_type == "Clasificación / Grupo":
-                risk_label = "Moderada" if ref_odds <= 2.50 else "Arriesgada"
-            else:
-                if ref_odds <= 1.50:
-                    risk_label = "Segura"
-                elif ref_odds <= 2.20:
-                    risk_label = "Moderada"
-                elif ref_odds <= 3.00:
-                    risk_label = "Arriesgada"
-                else:
-                    risk_label = "Muy arriesgada"
-            st.session_state.q_risk = risk_label
-            st.session_state.q_status = "Pendiente"
+        # Large text area
+        natural_input = st.text_area(
+            "Escribe tu apuesta",
+            placeholder="Ejemplo: España gana a Cabo Verde cuota 2\nEjemplo: España queda primera de grupo cuota 2, 10 euros\nEjemplo: Cabo Verde más de 1.5 tarjetas cuota 1.75",
+            height=150,
+            key="quick_bet_text_input"
+        )
 
-    # Display editable form if data has been detected
-    if "quick_bet_detected" in st.session_state and st.session_state.quick_bet_detected is not None:
-        parsed = st.session_state.quick_bet_detected
-        
-        st.markdown("---")
-        st.subheader("Revisar datos antes de analizar")
-        
-        odds_missing = parsed.get("odds") is None or parsed.get("odds") <= 1.0
-        stake_missing = parsed.get("stake") is None or parsed.get("stake") <= 0.0
-        
-        if odds_missing:
-            st.warning("⚠️ No se pudo detectar una cuota válida en el texto. Por favor, especifica la cuota.")
-        if stake_missing:
-            st.warning("⚠️ No se pudo detectar el importe de la apuesta. Por favor, especifica el importe.")
-            
-        col1, col2 = st.columns(2)
-        with col1:
-            edit_sport = st.selectbox(
-                "Deporte", 
-                ["Fútbol", "Baloncesto", "Tenis", "Otro"], 
-                index=["Fútbol", "Baloncesto", "Tenis", "Otro"].index(st.session_state.get("q_sport", "Fútbol")),
-                key="q_sport"
-            )
-            edit_comp = st.text_input("Competición", value=st.session_state.get("q_comp", ""), key="q_comp")
-            edit_match = st.text_input("Partido / Evento", value=st.session_state.get("q_match", ""), key="q_match")
-            edit_house = st.text_input("Casa de apuestas", value=st.session_state.get("q_house", "Winamax"), key="q_house")
-            edit_market = st.text_input("Apuesta", value=st.session_state.get("q_market", ""), key="q_market")
-            
-            bet_types_list = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
-            edit_type = st.selectbox(
-                "Tipo de apuesta",
-                bet_types_list,
-                index=bet_types_list.index(st.session_state.get("q_type", "Otro")) if st.session_state.get("q_type", "Otro") in bet_types_list else bet_types_list.index("Otro"),
-                key="q_type"
-            )
-            
-        with col2:
-            edit_is_boosted = (st.selectbox(
-                "¿Es superaumento?", 
-                ["Sí", "No"], 
-                index=0 if st.session_state.get("q_is_boosted", False) else 1, 
-                key="q_is_boosted_sel"
-            ) == "Sí")
-            
-            if edit_is_boosted:
-                edit_original_odds = st.number_input("Cuota original", min_value=1.01, value=float(st.session_state.get("q_original_odds", 2.00)), step=0.01, format="%.2f", key="q_original_odds_input")
-                edit_odds = st.number_input("Cuota aumentada", min_value=1.01, value=float(st.session_state.get("q_odds", 2.00)), step=0.01, format="%.2f", key="q_odds_boosted_input")
+        # Detectar datos Button
+        if st.button("DETECTAR DATOS", use_container_width=True, key="quick_bet_detect_btn"):
+            if not natural_input.strip():
+                st.error("Por favor, escribe los detalles de la apuesta antes de detectar los datos.")
             else:
-                edit_odds = st.number_input("Cuota", min_value=1.01, value=float(st.session_state.get("q_odds", 2.00)), step=0.01, format="%.2f", key="q_odds_normal_input")
-                edit_original_odds = edit_odds
+                parsed = parse_natural_bet(natural_input)
+                st.session_state.quick_bet_detected = parsed
+                st.session_state.quick_bet_final_analysis = None
                 
-            edit_stake = st.number_input("Importe apostado (€)", min_value=0.10, value=float(st.session_state.get("q_stake", 10.00)), step=1.0, format="%.2f", key="q_stake")
-            edit_prob = st.number_input("Probabilidad estimada (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.get("q_prob", 50.0)), step=0.1, key="q_prob")
-            
-            risk_options = ["Segura", "Moderada", "Arriesgada", "Muy arriesgada"]
-            edit_risk = st.selectbox(
-                "Riesgo", 
-                risk_options, 
-                index=risk_options.index(st.session_state.get("q_risk", "Moderada")) if st.session_state.get("q_risk", "Moderada") in risk_options else risk_options.index("Moderada"),
-                key="q_risk"
-            )
-            
-            status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
-            edit_status = st.selectbox(
-                "Estado",
-                status_options,
-                index=status_options.index(st.session_state.get("q_status", "Pendiente")),
-                key="q_status"
-            )
-            
-        if st.button("ANALIZAR APUESTA CORREGIDA", use_container_width=True, key="quick_bet_analyze_corrected_btn"):
-            # Execute analysis using form values
-            est_prob_decimal = edit_prob / 100.0
-            pot_return = edit_stake * edit_odds
-            pot_profit = edit_stake * (edit_odds - 1.0)
-            
-            if edit_status == "Ganada":
-                profit_val = float(edit_stake * (edit_odds - 1.0))
-            elif edit_status == "Perdida":
-                profit_val = float(-edit_stake)
-            else:
-                profit_val = 0.0
+                # Setup initial state values for editable widgets
+                st.session_state.q_sport = parsed.get("sport") or "Fútbol"
+                st.session_state.q_comp = parsed.get("competition") or ""
+                st.session_state.q_match = parsed.get("match") or parsed.get("bet_name") or ""
+                st.session_state.q_house = parsed.get("betting_house") or "Winamax"
+                st.session_state.q_market = parsed.get("bet_name") or ""
+                st.session_state.q_type = parsed.get("type") or "Otro"
+                st.session_state.q_is_boosted = parsed.get("is_boosted", False)
                 
-            # Valuation and details for boosted odds
-            valoracion = ""
-            mejora_str = ""
-            fair_odds = 1.0 / est_prob_decimal if est_prob_decimal > 0 else 1.0
-            
-            if edit_is_boosted:
-                if edit_odds <= fair_odds:
-                    valoracion = "Cuota mejorada poco relevante"
-                elif edit_odds >= 1.15 * fair_odds:
-                    valoracion = "Promoción muy atractiva, revisar límite y condiciones"
+                detected_odds = float(parsed["odds"]) if (parsed.get("odds") and parsed["odds"] > 1.0) else None
+                detected_stake = float(parsed["stake"]) if (parsed.get("stake") and parsed["stake"] > 0.0) else None
+                
+                st.session_state.q_odds = detected_odds if detected_odds else 2.00
+                st.session_state.q_stake = detected_stake if detected_stake else 10.0
+                st.session_state.q_original_odds = float(parsed.get("original_odds")) if parsed.get("original_odds") else (detected_odds if detected_odds else 2.00)
+                
+                # Initial estimations for the form
+                ref_odds = st.session_state.q_original_odds if st.session_state.q_is_boosted else st.session_state.q_odds
+                est_prob_decimal = (1.0 / ref_odds) * 0.94
+                est_prob_decimal = max(0.05, min(0.95, est_prob_decimal))
+                st.session_state.q_prob = float(round(est_prob_decimal * 100.0, 1))
+                
+                if st.session_state.q_type == "Clasificación / Grupo":
+                    risk_label = "Moderada" if ref_odds <= 2.50 else "Arriesgada"
                 else:
-                    valoracion = "Cuota mejorada interesante"
+                    if ref_odds <= 1.50:
+                        risk_label = "Segura"
+                    elif ref_odds <= 2.20:
+                        risk_label = "Moderada"
+                    elif ref_odds <= 3.00:
+                        risk_label = "Arriesgada"
+                    else:
+                        risk_label = "Muy arriesgada"
+                st.session_state.q_risk = risk_label
+                st.session_state.q_status = "Pendiente"
+
+        # Display editable form if data has been detected
+        if "quick_bet_detected" in st.session_state and st.session_state.quick_bet_detected is not None:
+            parsed = st.session_state.quick_bet_detected
+            
+            st.markdown("---")
+            st.subheader("Revisar datos antes de analizar")
+            
+            odds_missing = parsed.get("odds") is None or parsed.get("odds") <= 1.0
+            stake_missing = parsed.get("stake") is None or parsed.get("stake") <= 0.0
+            
+            if odds_missing:
+                st.warning("⚠️ No se pudo detectar una cuota válida en el texto. Por favor, especifica la cuota.")
+            if stake_missing:
+                st.warning("⚠️ No se pudo detectar el importe de la apuesta. Por favor, especifica el importe.")
+                
+            col1, col2 = st.columns(2)
+            with col1:
+                edit_sport = st.selectbox(
+                    "Deporte", 
+                    ["Fútbol", "Baloncesto", "Tenis", "Otro"], 
+                    index=["Fútbol", "Baloncesto", "Tenis", "Otro"].index(st.session_state.get("q_sport", "Fútbol")),
+                    key="q_sport"
+                )
+                edit_comp = st.text_input("Competición", value=st.session_state.get("q_comp", ""), key="q_comp")
+                edit_match = st.text_input("Partido / Evento", value=st.session_state.get("q_match", ""), key="q_match")
+                edit_house = st.text_input("Casa de apuestas", value=st.session_state.get("q_house", "Winamax"), key="q_house")
+                edit_market = st.text_input("Apuesta", value=st.session_state.get("q_market", ""), key="q_market")
+                
+                bet_types_list = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
+                edit_type = st.selectbox(
+                    "Tipo de apuesta",
+                    bet_types_list,
+                    index=bet_types_list.index(st.session_state.get("q_type", "Otro")) if st.session_state.get("q_type", "Otro") in bet_types_list else bet_types_list.index("Otro"),
+                    key="q_type"
+                )
+                
+            with col2:
+                edit_is_boosted = (st.selectbox(
+                    "¿Es superaumento?", 
+                    ["Sí", "No"], 
+                    index=0 if st.session_state.get("q_is_boosted", False) else 1, 
+                    key="q_is_boosted_sel"
+                ) == "Sí")
+                
+                if edit_is_boosted:
+                    edit_original_odds = st.number_input("Cuota original", min_value=1.01, value=float(st.session_state.get("q_original_odds", 2.00)), step=0.01, format="%.2f", key="q_original_odds_input")
+                    edit_odds = st.number_input("Cuota aumentada", min_value=1.01, value=float(st.session_state.get("q_odds", 2.00)), step=0.01, format="%.2f", key="q_odds_boosted_input")
+                else:
+                    edit_odds = st.number_input("Cuota", min_value=1.01, value=float(st.session_state.get("q_odds", 2.00)), step=0.01, format="%.2f", key="q_odds_normal_input")
+                    edit_original_odds = edit_odds
                     
-                if edit_original_odds < edit_odds:
-                    mejora_pct = ((edit_odds - edit_original_odds) / edit_original_odds) * 100.0
-                    mejora_str = f"+{mejora_pct:.1f}%"
+                edit_stake = st.number_input("Importe apostado (€)", min_value=0.10, value=float(st.session_state.get("q_stake", 10.00)), step=1.0, format="%.2f", key="q_stake")
+                edit_prob = st.number_input("Probabilidad estimada (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.get("q_prob", 50.0)), step=0.1, key="q_prob")
+                
+                risk_options = ["Segura", "Moderada", "Arriesgada", "Muy arriesgada"]
+                edit_risk = st.selectbox(
+                    "Riesgo", 
+                    risk_options, 
+                    index=risk_options.index(st.session_state.get("q_risk", "Moderada")) if st.session_state.get("q_risk", "Moderada") in risk_options else risk_options.index("Moderada"),
+                    key="q_risk"
+                )
+                
+                status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
+                edit_status = st.selectbox(
+                    "Estado",
+                    status_options,
+                    index=status_options.index(st.session_state.get("q_status", "Pendiente")),
+                    key="q_status"
+                )
+                
+            if st.button("ANALIZAR APUESTA CORREGIDA", use_container_width=True, key="quick_bet_analyze_corrected_btn"):
+                # Execute analysis using form values
+                est_prob_decimal = edit_prob / 100.0
+                pot_return = edit_stake * edit_odds
+                pot_profit = edit_stake * (edit_odds - 1.0)
+                
+                if edit_status == "Ganada":
+                    profit_val = float(edit_stake * (edit_odds - 1.0))
+                elif edit_status == "Perdida":
+                    profit_val = float(-edit_stake)
                 else:
-                    mejora_str = "0.0%"
-            
-            recommendation = ""
-            if not edit_is_boosted:
-                if edit_risk == "Segura":
-                    recommendation = "Apuesta conservadora, beneficio limitado."
-                elif edit_risk == "Moderada":
-                    recommendation = "Apuesta equilibrada, puede tener sentido con stake controlado."
-                elif edit_risk == "Arriesgada":
-                    recommendation = "Apuesta agresiva, usar stake bajo."
-                else:
-                    recommendation = "Apuesta especulativa, solo con importe muy pequeño."
-            
-            st.session_state.quick_bet_final_analysis = {
-                "sport": edit_sport,
-                "competition": edit_comp,
-                "match": edit_match,
-                "betting_house": edit_house,
-                "market": edit_market,
-                "type": edit_type,
-                "is_boosted": edit_is_boosted,
-                "original_odds": edit_original_odds,
-                "odds": edit_odds,
-                "stake": edit_stake,
-                "prob": est_prob_decimal,
-                "risk": edit_risk,
-                "status": edit_status,
-                "pot_return": pot_return,
-                "pot_profit": pot_profit,
-                "profit": profit_val,
-                "valoracion": valoracion,
-                "mejora_str": mejora_str,
-                "recommendation": recommendation,
-                "fair_odds": fair_odds
-            }
-            st.rerun()
+                    profit_val = 0.0
+                    
+                # Valuation and details for boosted odds
+                valoracion = ""
+                mejora_str = ""
+                fair_odds = 1.0 / est_prob_decimal if est_prob_decimal > 0 else 1.0
+                
+                if edit_is_boosted:
+                    if edit_odds <= fair_odds:
+                        valoracion = "Cuota mejorada poco relevante"
+                    elif edit_odds >= 1.15 * fair_odds:
+                        valoracion = "Promoción muy atractiva, revisar límite y condiciones"
+                    else:
+                        valoracion = "Cuota mejorada interesante"
+                        
+                    if edit_original_odds < edit_odds:
+                        mejora_pct = ((edit_odds - edit_original_odds) / edit_original_odds) * 100.0
+                        mejora_str = f"+{mejora_pct:.1f}%"
+                    else:
+                        mejora_str = "0.0%"
+                
+                recommendation = ""
+                if not edit_is_boosted:
+                    if edit_risk == "Segura":
+                        recommendation = "Apuesta conservadora, beneficio limitado."
+                    elif edit_risk == "Moderada":
+                        recommendation = "Apuesta equilibrada, puede tener sentido con stake controlado."
+                    elif edit_risk == "Arriesgada":
+                        recommendation = "Apuesta agresiva, usar stake bajo."
+                    else:
+                        recommendation = "Apuesta especulativa, solo con importe muy pequeño."
+                
+                st.session_state.quick_bet_final_analysis = {
+                    "sport": edit_sport,
+                    "competition": edit_comp,
+                    "match": edit_match,
+                    "betting_house": edit_house,
+                    "market": edit_market,
+                    "type": edit_type,
+                    "is_boosted": edit_is_boosted,
+                    "original_odds": edit_original_odds,
+                    "odds": edit_odds,
+                    "stake": edit_stake,
+                    "prob": est_prob_decimal,
+                    "risk": edit_risk,
+                    "status": edit_status,
+                    "pot_return": pot_return,
+                    "pot_profit": pot_profit,
+                    "profit": profit_val,
+                    "valoracion": valoracion,
+                    "mejora_str": mejora_str,
+                    "recommendation": recommendation,
+                    "fair_odds": fair_odds
+                }
+                st.rerun()
 
         # Display final analysis if calculated
         if "quick_bet_final_analysis" in st.session_state and st.session_state.quick_bet_final_analysis is not None:
@@ -3941,6 +3951,437 @@ elif section == "Analizar apuesta":
                 if st.button("CANCELAR", use_container_width=True, key="quick_cancel_btn"):
                     st.session_state.quick_bet_detected = None
                     st.session_state.quick_bet_final_analysis = None
+                    st.rerun()
+                    
+    else:  # Recomendar combinadas
+        st.markdown("Pega varias líneas de mercados y cuotas (por ejemplo, copiadas de una captura) y la aplicación te recomendará combinaciones seguras automáticamente.")
+        
+        # Configuration columns
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1:
+            total_stake = st.number_input("Cantidad total a apostar (€)", min_value=1.0, value=10.0, step=1.0, key="combo_rec_total_stake")
+        with col_c2:
+            num_combos = st.selectbox("Número de combinadas recomendadas", [1, 2, 3], index=1, key="combo_rec_num")
+        with col_c3:
+            risk_profile = st.selectbox("Perfil de riesgo", ["Conservador", "Equilibrado", "Agresivo"], index=1, key="combo_rec_risk_profile")
+            
+        # Large text area
+        natural_input = st.text_area(
+            "Mercados y cuotas a pegar",
+            placeholder="Ejemplo:\nCanada gana 1.84\nCanada o empate 1.22\nMás de 1.5 goles 1.35\nMenos de 4.5 goles 1.18",
+            height=180,
+            key="combo_rec_text_input"
+        )
+        
+        # Detectar mercados Button
+        if st.button("DETECTAR MERCADOS", use_container_width=True, key="combo_rec_detect_btn"):
+            if not natural_input.strip():
+                st.error("Por favor, introduce los mercados y cuotas antes de continuar.")
+            else:
+                parsed = parse_flexible_input(natural_input)
+                if not parsed:
+                    st.error("No se pudieron detectar mercados o cuotas en el texto. Asegúrate de que las cuotas aparezcan al final de cada línea (ej. 'Canada o empate 1.22').")
+                else:
+                    # Clear old keys first
+                    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("c_market_") or k.startswith("c_odds_") or k.startswith("c_prob_") or k.startswith("c_risk_") or k.startswith("c_type_")]
+                    for k in keys_to_clear:
+                        del st.session_state[k]
+                        
+                    # Setup initial state values for detected items
+                    detected_items = []
+                    for idx, item in enumerate(parsed):
+                        odds = item["odds"]
+                        # Estimate probability
+                        prob = (1.0 / odds) * 0.94
+                        prob = max(0.05, min(0.95, prob))
+                        prob_pct = float(round(prob * 100.0, 1))
+                        
+                        # Estimate risk
+                        if odds <= 1.50:
+                            risk = "Segura"
+                        elif odds <= 2.20:
+                            risk = "Moderada"
+                        elif odds <= 3.00:
+                            risk = "Arriesgada"
+                        else:
+                            risk = "Muy arriesgada"
+                            
+                        # Estimate type
+                        m_l = item["market"].lower()
+                        m_type = "Otro"
+                        group_keywords = ["queda primera", "queda primero", "primera de grupo", "primero de grupo", "gana el grupo", "ganar el grupo", "líder de grupo", "clasifica", "clasificación", "clasificacion", "pasa de grupo", "fase de grupos", "grupo"]
+                        if any(k in m_l for k in group_keywords):
+                            m_type = "Clasificación / Grupo"
+                        elif any(k in m_l for k in ["goles", "over", "under", "más de", "menos de", "ambos marcan", "mas de", "menos de"]):
+                            m_type = "Goles"
+                        elif any(k in m_l for k in ["córners", "corners", "saques de esquina", "corner", "córner"]):
+                            m_type = "Córners"
+                        elif any(k in m_l for k in ["tarjetas", "cards", "amonestaciones", "tarjeta", "card"]):
+                            m_type = "Tarjetas"
+                        elif any(k in m_l for k in ["handicap", "hándicap", "asiático", "asian", "asiatico"]):
+                            m_type = "Hándicap"
+                        elif any(k in m_l for k in ["jugador", "tiros jugador", "remates jugador", "tiros de", "remates de"]):
+                            m_type = "Jugador"
+                        elif any(k in m_l for k in ["combined", "combinada", "+", "and", "y cuota combinada"]):
+                            m_type = "Combinada"
+                        elif any(k in m_l for k in ["gana", "win", "ganador"]):
+                            m_type = "Resultado"
+                            
+                        detected_items.append({
+                            "market": item["market"],
+                            "odds": odds,
+                            "probability_pct": prob_pct,
+                            "risk": risk,
+                            "type": m_type
+                        })
+                        
+                        # Set initial widget values
+                        st.session_state[f"c_market_{idx}"] = item["market"]
+                        st.session_state[f"c_odds_{idx}"] = odds
+                        st.session_state[f"c_prob_{idx}"] = prob_pct
+                        st.session_state[f"c_risk_{idx}"] = risk
+                        st.session_state[f"c_type_{idx}"] = m_type
+                        
+                    st.session_state.combos_detected = detected_items
+                    st.session_state.combos_recommendations = None
+                    st.rerun()
+
+        # Display editable form if markets are detected
+        if "combos_detected" in st.session_state and st.session_state.combos_detected is not None:
+            detected_list = st.session_state.combos_detected
+            
+            st.markdown("---")
+            st.subheader("Revisar cuotas antes de recomendar")
+            
+            # Table headers
+            th1, th2, th3, th4, th5 = st.columns([3, 1.2, 1.5, 1.8, 2])
+            th1.markdown("**Mercado**")
+            th2.markdown("**Cuota**")
+            th3.markdown("**Prob. (%)**")
+            th4.markdown("**Riesgo**")
+            th5.markdown("**Tipo de mercado**")
+            
+            # Form fields
+            for idx, item in enumerate(detected_list):
+                col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns([3, 1.2, 1.5, 1.8, 2])
+                with col_m1:
+                    st.text_input(f"c_market_lbl_{idx}", value=st.session_state.get(f"c_market_{idx}", item["market"]), key=f"c_market_{idx}", label_visibility="collapsed")
+                with col_m2:
+                    st.number_input(f"c_odds_lbl_{idx}", min_value=1.01, value=float(st.session_state.get(f"c_odds_{idx}", item["odds"])), step=0.01, format="%.2f", key=f"c_odds_{idx}", label_visibility="collapsed")
+                with col_m3:
+                    st.number_input(f"c_prob_lbl_{idx}", min_value=0.0, max_value=100.0, value=float(st.session_state.get(f"c_prob_{idx}", item["probability_pct"])), step=1.0, format="%.1f", key=f"c_prob_{idx}", label_visibility="collapsed")
+                with col_m4:
+                    risk_opts = ["Segura", "Moderada", "Arriesgada", "Muy arriesgada"]
+                    st.selectbox(f"c_risk_lbl_{idx}", risk_opts, index=risk_opts.index(st.session_state.get(f"c_risk_{idx}", item["risk"])) if st.session_state.get(f"c_risk_{idx}", item["risk"]) in risk_opts else 1, key=f"c_risk_{idx}", label_visibility="collapsed")
+                with col_m5:
+                    types_opts = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
+                    st.selectbox(f"c_type_lbl_{idx}", types_opts, index=types_opts.index(st.session_state.get(f"c_type_{idx}", item["type"])) if st.session_state.get(f"c_type_{idx}", item["type"]) in types_opts else 8, key=f"c_type_{idx}", label_visibility="collapsed")
+                    
+            if st.button("GENERAR COMBINADAS", use_container_width=True, key="combo_rec_generate_btn"):
+                # Collect edited values
+                corrected_items = []
+                for idx in range(len(detected_list)):
+                    market = st.session_state[f"c_market_{idx}"]
+                    odds = float(st.session_state[f"c_odds_{idx}"])
+                    prob_pct = float(st.session_state[f"c_prob_{idx}"])
+                    risk_lbl = st.session_state[f"c_risk_{idx}"]
+                    m_type = st.session_state[f"c_type_{idx}"]
+                    
+                    # Convert to mathematical parameters for combination logic
+                    if risk_lbl == "Segura":
+                        risk_val, unc_val = 0.15, 0.15
+                    elif risk_lbl == "Moderada":
+                        risk_val, unc_val = 0.25, 0.25
+                    elif risk_lbl == "Arriesgada":
+                        risk_val, unc_val = 0.40, 0.40
+                    else:
+                        risk_val, unc_val = 0.60, 0.60
+                        
+                    corrected_items.append({
+                        "market": market,
+                        "odds": odds,
+                        "probability": prob_pct / 100.0,
+                        "risk": risk_val,
+                        "uncertainty": unc_val,
+                        "risk_label": risk_lbl,
+                        "type": m_type
+                    })
+                    
+                # Safe legs custom check
+                def is_safe_leg_custom(leg) -> bool:
+                    odds = leg["odds"]
+                    prob = leg["probability"]
+                    risk = leg["risk"]
+                    unc = leg["uncertainty"]
+                    if 1.10 <= odds <= 1.60 and prob >= 0.70 and risk <= 0.30 and unc <= 0.30:
+                        return True
+                    if 1.60 <= odds <= 1.80 and prob >= 0.60 and risk <= 0.35 and unc <= 0.35:
+                        return True
+                    return False
+
+                # Build combinations
+                two_leg_combinations = []
+                for i in range(len(corrected_items)):
+                    for j in range(i + 1, len(corrected_items)):
+                        leg1 = corrected_items[i]
+                        leg2 = corrected_items[j]
+                        if are_contradictory(leg1["market"], leg2["market"]):
+                            continue
+                        c_odds = leg1["odds"] * leg2["odds"]
+                        c_prob = leg1["probability"] * leg2["probability"]
+                        c_risk = (leg1["risk"] + leg2["risk"]) / 2.0 + 0.05
+                        c_unc = (leg1["uncertainty"] + leg2["uncertainty"]) / 2.0 + 0.05
+                        two_leg_combinations.append({
+                            "rec_type": "Combinada segura de 2 patas",
+                            "combined_bet": True,
+                            "legs": [leg1, leg2],
+                            "market": f"{leg1['market']} + {leg2['market']}",
+                            "odds": c_odds,
+                            "probability": c_prob,
+                            "risk": c_risk,
+                            "uncertainty": c_unc
+                        })
+
+                three_leg_combinations = []
+                for i in range(len(corrected_items)):
+                    for j in range(i + 1, len(corrected_items)):
+                        for k in range(j + 1, len(corrected_items)):
+                            leg1 = corrected_items[i]
+                            leg2 = corrected_items[j]
+                            leg3 = corrected_items[k]
+                            if (are_contradictory(leg1["market"], leg2["market"]) or 
+                                are_contradictory(leg1["market"], leg3["market"]) or 
+                                are_contradictory(leg2["market"], leg3["market"])):
+                                continue
+                            c_odds = leg1["odds"] * leg2["odds"] * leg3["odds"]
+                            c_prob = leg1["probability"] * leg2["probability"] * leg3["probability"]
+                            c_risk = (leg1["risk"] + leg2["risk"] + leg3["risk"]) / 3.0 + 0.10
+                            c_unc = (leg1["uncertainty"] + leg2["uncertainty"] + leg3["uncertainty"]) / 3.0 + 0.10
+                            three_leg_combinations.append({
+                                "rec_type": "Combinada segura de 3 patas",
+                                "combined_bet": True,
+                                "legs": [leg1, leg2, leg3],
+                                "market": f"{leg1['market']} + {leg2['market']} + {leg3['market']}",
+                                "odds": c_odds,
+                                "probability": c_prob,
+                                "risk": c_risk,
+                                "uncertainty": c_unc
+                            })
+
+                # Candidate combination loops matching the exact calculator rules
+                candidates = []
+                # Type 3: Combinada segura de 2 patas
+                for combo in two_leg_combinations:
+                    if is_safe_leg_custom(combo["legs"][0]) and is_safe_leg_custom(combo["legs"][1]) and 1.60 <= combo["odds"] <= 2.40:
+                        candidates.append(combo)
+                        
+                # Type 4: Combinada segura de 3 patas
+                for combo in three_leg_combinations:
+                    if is_safe_leg_custom(combo["legs"][0]) and is_safe_leg_custom(combo["legs"][1]) and is_safe_leg_custom(combo["legs"][2]) and 1.60 <= combo["odds"] <= 2.40:
+                        candidates.append(combo)
+
+                # Custom combination scoring logic: prefer closest to 1.90 odds, penalize out of range
+                for cand in candidates:
+                    prob = cand["probability"]
+                    risk = cand["risk"]
+                    unc = cand["uncertainty"]
+                    score = prob * 100.0 - risk * 30.0 - unc * 30.0
+                    odds = cand["odds"]
+                    if 1.70 <= odds <= 2.20:
+                        score += 15.0
+                        dist_1_90 = abs(odds - 1.90)
+                        score += 5.0 * (1.0 - dist_1_90 / 0.20)
+                    elif 1.60 <= odds < 1.70 or 2.20 < odds <= 2.40:
+                        score += 5.0
+                    elif odds < 1.60:
+                        score -= 20.0
+                    elif odds > 2.40:
+                        score -= 25.0
+                        
+                    # safe market bonus
+                    if any(is_safe_market_type(leg["market"]) for leg in cand["legs"]):
+                        score += 5.0
+                        
+                    cand["score"] = score
+
+                candidates_sorted = sorted(candidates, key=lambda x: x["score"], reverse=True)
+                
+                # Deduplication and selection using correlation penalties
+                unique_combos = []
+                seen_legs = set()
+                for cand in candidates_sorted:
+                    leg_set = frozenset([leg["market"] for leg in cand["legs"]])
+                    if leg_set not in seen_legs:
+                        seen_legs.add(leg_set)
+                        unique_combos.append(cand)
+                        
+                selected_combos = []
+                for _ in range(min(num_combos, len(unique_combos))):
+                    best_cand = None
+                    best_score = -999999
+                    for cand in unique_combos:
+                        if cand in selected_combos:
+                            continue
+                        current_score = cand["score"]
+                        already_selected_types = [c["rec_type"] for c in selected_combos]
+                        if cand["rec_type"] in already_selected_types:
+                            current_score -= 15.0
+                            
+                        # Correlation check
+                        for sel in selected_combos:
+                            if are_correlated(cand, sel):
+                                current_score -= 20.0
+                                
+                        if current_score > best_score:
+                            best_score = current_score
+                            best_cand = cand
+                    if best_cand:
+                        selected_combos.append(best_cand)
+
+                st.session_state.combos_recommendations = {
+                    "selected_combos": selected_combos,
+                    "total_stake": total_stake,
+                    "num_combos": num_combos,
+                    "risk_profile": risk_profile
+                }
+                st.rerun()
+
+        # Display combinations recommendations
+        if "combos_recommendations" in st.session_state and st.session_state.combos_recommendations is not None:
+            recs_data = st.session_state.combos_recommendations
+            selected_combos = recs_data["selected_combos"]
+            c_total_stake = recs_data["total_stake"]
+            c_num_combos = recs_data["num_combos"]
+            c_risk_profile = recs_data["risk_profile"]
+            
+            st.markdown("---")
+            st.subheader("Combinaciones recomendadas")
+            
+            if not selected_combos:
+                st.warning("No se pudieron generar combinaciones seguras con los mercados proporcionados. Asegúrate de incluir mercados de cuotas bajas (1.10 - 1.60) con alta probabilidad estimada para servir como anclas.")
+            else:
+                # Stake allocation percentages
+                if c_num_combos == 1:
+                    pcts = [1.0]
+                elif c_num_combos == 2:
+                    if c_risk_profile == "Conservador":
+                        pcts = [0.70, 0.30]
+                    elif c_risk_profile == "Equilibrado":
+                        pcts = [0.60, 0.40]
+                    else:  # Agresivo
+                        pcts = [0.50, 0.50]
+                else:  # c_num_combos == 3
+                    if c_risk_profile == "Conservador":
+                        pcts = [0.60, 0.25, 0.15]
+                    elif c_risk_profile == "Equilibrado":
+                        pcts = [0.50, 0.30, 0.20]
+                    else:  # Agresivo
+                        pcts = [0.40, 0.35, 0.25]
+                        
+                M = len(selected_combos)
+                rep_label = " / ".join([f"{p*100:.0f}%" for p in pcts[:M]])
+                st.markdown(f"""
+                <div style="border-bottom: 2px solid #E30613; margin-top: 20px; margin-bottom: 15px; padding-bottom: 5px;">
+                    <h3 style="color: #ffffff; margin: 0;">Reparto Automático ({c_risk_profile}): {rep_label}</h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                total_ret_opt = 0.0
+                total_prof_opt = 0.0
+                
+                for idx, combo in enumerate(selected_combos):
+                    pct_val = pcts[idx] if idx < len(pcts) else 0.0
+                    stake_val = c_total_stake * pct_val
+                    pot_return = stake_val * combo["odds"]
+                    pot_profit = pot_return - stake_val
+                    
+                    total_ret_opt += pot_return
+                    total_prof_opt += pot_profit
+                    
+                    legs_list_html = "".join([f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in combo["legs"]])
+                    
+                    risk_label = get_risk_label(combo["risk"])
+                    
+                    # Custom combo explanations
+                    if combo["rec_type"] == "Combinada segura de 2 patas":
+                        explanation = "Combina una pata ancla muy segura con otro mercado conservador para optimizar las cuotas."
+                    else:
+                        explanation = "Combinada de tres selecciones muy conservadoras que mantiene el riesgo controlado dentro de las cuotas finales."
+                        
+                    html_combo_card = f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px; border-left: 5px solid #E30613; margin-bottom: 15px; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222;">
+<div style="font-size: 15px; font-weight: bold; color: #E30613; margin-bottom: 5px; text-transform: uppercase;">#{idx+1} — {combo['rec_type']}</div>
+<div style="font-size: 14px; color: #a0aec0; margin-bottom: 4px;"><b>Selecciones:</b></div>
+<ol style="margin: 5px 0; padding-left: 20px; color: #a0aec0;">{legs_list_html}</ol>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 14px; color: #a0aec0; margin-top: 10px;">
+<div><b>Cuota total:</b> <span style="color: #ffffff;">{combo['odds']:.2f}</span></div>
+<div><b>Probabilidad estimada:</b> <span style="color: #ffffff;">{combo['probability'] * 100.0:.0f}%</span></div>
+<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
+<div><b>Importe recomendado:</b> <span style="color: #ffffff; font-weight: bold;">{stake_val:.2f} €</span></div>
+<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
+<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
+<div style="grid-column: span 2;"><b>Motivo:</b> <span style="color: #ffffff; font-style: italic;">{explanation}</span></div>
+</div>
+</div>"""
+                    st.markdown(html_combo_card, unsafe_allow_html=True)
+                    
+                    is_in_portfolio = any(b.get("market") == combo["market"] and b.get("combined_bet") for b in st.session_state.portfolio)
+                    if is_in_portfolio:
+                        st.button("Guardada en cartera", key=f"save_combo_port_btn_disabled_{idx}", disabled=True)
+                    else:
+                        if st.button("GUARDAR COMBINADA EN CARTERA", use_container_width=True, key=f"save_combo_port_btn_{idx}"):
+                            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            new_port_bet = {
+                                "id": f"combo_port_{int(time.time())}_{idx}",
+                                "date_placed": now_str,
+                                "date_saved": now_str,
+                                "sport": "Fútbol",
+                                "competition": "",
+                                "match": "Combinada recomendada",
+                                "betting_house": "Winamax",
+                                "market": combo["market"],
+                                "odds": float(combo["odds"]),
+                                "stake": float(stake_val),
+                                "status": "Pendiente",
+                                "potential_return": float(pot_return),
+                                "potential_profit": float(pot_profit),
+                                "profit": 0.0,
+                                "combined_bet": True,
+                                "legs": [{
+                                    "market": leg["market"],
+                                    "odds": float(leg["odds"]),
+                                    "probability": float(leg["probability"]),
+                                    "risk": float(leg["risk"]),
+                                    "uncertainty": float(leg["uncertainty"])
+                                } for leg in combo["legs"]],
+                                "estimated_probability": float(combo["probability"]),
+                                "risk": risk_label,
+                                "type": combo["rec_type"]
+                            }
+                            
+                            if "portfolio" not in st.session_state:
+                                st.session_state.portfolio = []
+                            st.session_state.portfolio.append(new_port_bet)
+                            save_portfolio()
+                            st.success("¡Combinada guardada con éxito en la cartera!")
+                            time.sleep(0.5)
+                            st.session_state.combos_detected = None
+                            st.session_state.combos_recommendations = None
+                            navigate_to_section("Cartera")
+                            st.rerun()
+
+                st.markdown(f"""
+                <div style="background-color: #111111; padding: 12px 18px; border-radius: 8px; border: 1px solid #E30613; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: bold; color: #ffffff;">Resumen Reparto:</span>
+                    <span style="color: #a0aec0;">Importe total: <b style="color: #ffffff;">{c_total_stake:.2f} €</b></span>
+                    <span style="color: #a0aec0;">Retorno potencial total: <b style="color: #ffffff;">{total_ret_opt:.2f} €</b></span>
+                    <span style="color: #a0aec0;">Beneficio potencial total: <b style="color: #00C853;">{total_prof_opt:.2f} €</b></span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Cancel recommendations Button
+                if st.button("LIMPIAR RECOMENDACIONES", use_container_width=True, key="combo_rec_clear_btn"):
+                    st.session_state.combos_detected = None
+                    st.session_state.combos_recommendations = None
                     st.rerun()
 
 # ----------------------------------------------------

@@ -1730,7 +1730,7 @@ Please be conservative with:
         prob = leg["probability"]
         risk = leg["risk"]
         unc = leg["uncertainty"]
-        if 1.10 <= odds <= 1.60 and prob >= 0.68 and risk <= 0.32 and unc <= 0.32:
+        if 1.10 <= odds <= 1.60 and prob >= 0.70 and risk <= 0.30 and unc <= 0.30:
             return True
         if 1.60 <= odds <= 1.80 and prob >= 0.60 and risk <= 0.35 and unc <= 0.35:
             return True
@@ -2028,7 +2028,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             # Type 1: Apuesta simple segura
             type_1_candidates = []
             for item in parsed_items:
-                if is_safe_leg(item):
+                if is_safe_leg(item) and not item.get("is_boosted", False):
                     type_1_candidates.append({
                         "rec_type": "Apuesta simple segura",
                         "combined_bet": False,
@@ -2038,14 +2038,14 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                         "probability": item["probability"],
                         "risk": item["risk"],
                         "uncertainty": item["uncertainty"],
-                        "is_boosted": item.get("is_boosted", False),
-                        "original_odds": item.get("original_odds", None)
+                        "is_boosted": False,
+                        "original_odds": None
                     })
 
             # Type 2: Apuesta simple con buena cuota
             type_2_candidates = []
             for item in parsed_items:
-                if 1.60 <= item["odds"] <= 2.50 and item["probability"] >= 0.45:
+                if 1.60 <= item["odds"] <= 2.50 and item["probability"] >= 0.45 and not item.get("is_boosted", False):
                     type_2_candidates.append({
                         "rec_type": "Apuesta simple con buena cuota",
                         "combined_bet": False,
@@ -2055,14 +2055,14 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                         "probability": item["probability"],
                         "risk": item["risk"],
                         "uncertainty": item["uncertainty"],
-                        "is_boosted": item.get("is_boosted", False),
-                        "original_odds": item.get("original_odds", None)
+                        "is_boosted": False,
+                        "original_odds": None
                     })
 
             # Type 3: Combinada segura de 2 patas
             type_3_candidates = []
             for combo in two_leg_combinations:
-                if is_safe_leg(combo["legs"][0]) and is_safe_leg(combo["legs"][1]):
+                if is_safe_leg(combo["legs"][0]) and is_safe_leg(combo["legs"][1]) and 1.60 <= combo["odds"] <= 2.40 and not any(leg.get("is_boosted", False) for leg in combo["legs"]):
                     type_3_candidates.append({
                         "rec_type": "Combinada segura de 2 patas",
                         "combined_bet": True,
@@ -2077,7 +2077,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             # Type 4: Combinada segura de 3 patas
             type_4_candidates = []
             for combo in three_leg_combinations:
-                if is_safe_leg(combo["legs"][0]) and is_safe_leg(combo["legs"][1]) and is_safe_leg(combo["legs"][2]):
+                if is_safe_leg(combo["legs"][0]) and is_safe_leg(combo["legs"][1]) and is_safe_leg(combo["legs"][2]) and 1.60 <= combo["odds"] <= 2.40 and not any(leg.get("is_boosted", False) for leg in combo["legs"]):
                     type_4_candidates.append({
                         "rec_type": "Combinada segura de 3 patas",
                         "combined_bet": True,
@@ -2109,7 +2109,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
             # Type 6: Apuesta ancla del favorito
             type_6_candidates = []
             for item in parsed_items:
-                if 1.10 <= item["odds"] <= 1.60 and is_safe_market_type(item["market"]) and is_safe_leg(item):
+                if 1.10 <= item["odds"] <= 1.60 and is_safe_market_type(item["market"]) and is_safe_leg(item) and not item.get("is_boosted", False):
                     type_6_candidates.append({
                         "rec_type": "Apuesta ancla del favorito",
                         "combined_bet": False,
@@ -2129,7 +2129,7 @@ France over 1.5 cards,1.90,60,15,12,Medium"""
                     for leg in combo["legs"]
                 )
                 all_legs_safe = all(is_safe_leg(leg) for leg in combo["legs"])
-                if has_favorite_anchor and all_legs_safe:
+                if has_favorite_anchor and all_legs_safe and 1.60 <= combo["odds"] <= 2.40 and not any(leg.get("is_boosted", False) for leg in combo["legs"]):
                     type_7_candidates.append({
                         "rec_type": "Combinada conservadora del favorito",
                         "combined_bet": True,
@@ -3652,7 +3652,7 @@ CSV rules:
 # ----------------------------------------------------
 elif section == "Analizar apuesta":
     st.markdown('<div class="big-title">ANALIZAR APUESTA</div>', unsafe_allow_html=True)
-    st.markdown("Escribe los detalles de tu apuesta en lenguaje natural y la calculadora estimará la probabilidad y el riesgo de forma instantánea.")
+    st.markdown("Escribe los detalles de tu apuesta en lenguaje natural, revisa los datos detectados y obtén un análisis detallado.")
 
     # Large text area
     natural_input = st.text_area(
@@ -3662,66 +3662,40 @@ elif section == "Analizar apuesta":
         key="quick_bet_text_input"
     )
 
-    # Analyze Button
-    if st.button("ANALIZAR", use_container_width=True, key="quick_bet_analyze_btn"):
+    # Detectar datos Button
+    if st.button("DETECTAR DATOS", use_container_width=True, key="quick_bet_detect_btn"):
         if not natural_input.strip():
-            st.error("Por favor, escribe los detalles de la apuesta antes de analizar.")
+            st.error("Por favor, escribe los detalles de la apuesta antes de detectar los datos.")
         else:
             parsed = parse_natural_bet(natural_input)
-            st.session_state.quick_bet_parsed = parsed
-
-    # Display parsed and analyzed results if available
-    if "quick_bet_parsed" in st.session_state and st.session_state.quick_bet_parsed is not None:
-        parsed = st.session_state.quick_bet_parsed
-        bet_name = parsed["bet_name"]
-        match_val = parsed["match"]
-        odds = parsed["odds"]
-        detected_stake = parsed["stake"]
-        betting_house_val = parsed["betting_house"]
-        sport_val = parsed["sport"]
-        bet_type = parsed["type"]
-        competition_val = parsed["competition"]
-
-        is_boosted = parsed.get("is_boosted", False)
-        original_odds = parsed.get("original_odds", None)
-
-        if not odds or odds <= 1.0:
-            st.warning("No se pudo detectar una cuota válida en el texto (por ejemplo, 'cuota 2' o '@2.00'). Por favor, especifica la cuota para poder completar el análisis.")
-            odds = st.number_input("Cuota corregida", min_value=1.01, value=2.00, step=0.01, format="%.2f", key="quick_odds_fallback")
-            parsed["odds"] = odds
-            st.session_state.quick_bet_parsed = parsed
-
-        if odds and odds > 1.0:
-            # 1. Base probability and risk
-            if is_boosted:
-                orig_odds_val = original_odds if original_odds else odds
-                est_prob_decimal = (1.0 / orig_odds_val) * 0.94
-                est_prob_pct = est_prob_decimal * 100.0
-                fair_odds = 1.0 / est_prob_decimal
-                
-                # Valuation
-                if odds <= fair_odds:
-                    valoracion = "Cuota mejorada poco relevante"
-                elif odds >= 1.15 * fair_odds:
-                    valoracion = "Promoción muy atractiva, revisar límite y condiciones"
-                else:
-                    valoracion = "Cuota mejorada interesante"
-                    
-                # Improvement percentage
-                if orig_odds_val < odds:
-                    mejora_pct = ((odds - orig_odds_val) / orig_odds_val) * 100.0
-                    mejora_str = f"+{mejora_pct:.1f}%"
-                else:
-                    mejora_str = "0.0%"
+            st.session_state.quick_bet_detected = parsed
+            st.session_state.quick_bet_final_analysis = None
+            
+            # Setup initial state values for editable widgets
+            st.session_state.q_sport = parsed.get("sport") or "Fútbol"
+            st.session_state.q_comp = parsed.get("competition") or ""
+            st.session_state.q_match = parsed.get("match") or parsed.get("bet_name") or ""
+            st.session_state.q_house = parsed.get("betting_house") or "Winamax"
+            st.session_state.q_market = parsed.get("bet_name") or ""
+            st.session_state.q_type = parsed.get("type") or "Otro"
+            st.session_state.q_is_boosted = parsed.get("is_boosted", False)
+            
+            detected_odds = float(parsed["odds"]) if (parsed.get("odds") and parsed["odds"] > 1.0) else None
+            detected_stake = float(parsed["stake"]) if (parsed.get("stake") and parsed["stake"] > 0.0) else None
+            
+            st.session_state.q_odds = detected_odds if detected_odds else 2.00
+            st.session_state.q_stake = detected_stake if detected_stake else 10.0
+            st.session_state.q_original_odds = float(parsed.get("original_odds")) if parsed.get("original_odds") else (detected_odds if detected_odds else 2.00)
+            
+            # Initial estimations for the form
+            ref_odds = st.session_state.q_original_odds if st.session_state.q_is_boosted else st.session_state.q_odds
+            est_prob_decimal = (1.0 / ref_odds) * 0.94
+            est_prob_decimal = max(0.05, min(0.95, est_prob_decimal))
+            st.session_state.q_prob = float(round(est_prob_decimal * 100.0, 1))
+            
+            if st.session_state.q_type == "Clasificación / Grupo":
+                risk_label = "Moderada" if ref_odds <= 2.50 else "Arriesgada"
             else:
-                est_prob_decimal = (1.0 / odds) * 0.94
-                est_prob_pct = est_prob_decimal * 100.0
-                
-            # 2. Risk label
-            if bet_type == "Clasificación / Grupo":
-                risk_label = "Moderada" if odds <= 2.50 else "Arriesgada"
-            else:
-                ref_odds = original_odds if (is_boosted and original_odds) else odds
                 if ref_odds <= 1.50:
                     risk_label = "Segura"
                 elif ref_odds <= 2.20:
@@ -3730,96 +3704,244 @@ elif section == "Analizar apuesta":
                     risk_label = "Arriesgada"
                 else:
                     risk_label = "Muy arriesgada"
+            st.session_state.q_risk = risk_label
+            st.session_state.q_status = "Pendiente"
+
+    # Display editable form if data has been detected
+    if "quick_bet_detected" in st.session_state and st.session_state.quick_bet_detected is not None:
+        parsed = st.session_state.quick_bet_detected
+        
+        st.markdown("---")
+        st.subheader("Revisar datos antes de analizar")
+        
+        odds_missing = parsed.get("odds") is None or parsed.get("odds") <= 1.0
+        stake_missing = parsed.get("stake") is None or parsed.get("stake") <= 0.0
+        
+        if odds_missing:
+            st.warning("⚠️ No se pudo detectar una cuota válida en el texto. Por favor, especifica la cuota.")
+        if stake_missing:
+            st.warning("⚠️ No se pudo detectar el importe de la apuesta. Por favor, especifica el importe.")
+            
+        col1, col2 = st.columns(2)
+        with col1:
+            edit_sport = st.selectbox(
+                "Deporte", 
+                ["Fútbol", "Baloncesto", "Tenis", "Otro"], 
+                index=["Fútbol", "Baloncesto", "Tenis", "Otro"].index(st.session_state.get("q_sport", "Fútbol")),
+                key="q_sport"
+            )
+            edit_comp = st.text_input("Competición", value=st.session_state.get("q_comp", ""), key="q_comp")
+            edit_match = st.text_input("Partido / Evento", value=st.session_state.get("q_match", ""), key="q_match")
+            edit_house = st.text_input("Casa de apuestas", value=st.session_state.get("q_house", "Winamax"), key="q_house")
+            edit_market = st.text_input("Apuesta", value=st.session_state.get("q_market", ""), key="q_market")
+            
+            bet_types_list = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
+            edit_type = st.selectbox(
+                "Tipo de apuesta",
+                bet_types_list,
+                index=bet_types_list.index(st.session_state.get("q_type", "Otro")) if st.session_state.get("q_type", "Otro") in bet_types_list else bet_types_list.index("Otro"),
+                key="q_type"
+            )
+            
+        with col2:
+            edit_is_boosted = (st.selectbox(
+                "¿Es superaumento?", 
+                ["Sí", "No"], 
+                index=0 if st.session_state.get("q_is_boosted", False) else 1, 
+                key="q_is_boosted_sel"
+            ) == "Sí")
+            
+            if edit_is_boosted:
+                edit_original_odds = st.number_input("Cuota original", min_value=1.01, value=float(st.session_state.get("q_original_odds", 2.00)), step=0.01, format="%.2f", key="q_original_odds_input")
+                edit_odds = st.number_input("Cuota aumentada", min_value=1.01, value=float(st.session_state.get("q_odds", 2.00)), step=0.01, format="%.2f", key="q_odds_boosted_input")
+            else:
+                edit_odds = st.number_input("Cuota", min_value=1.01, value=float(st.session_state.get("q_odds", 2.00)), step=0.01, format="%.2f", key="q_odds_normal_input")
+                edit_original_odds = edit_odds
+                
+            edit_stake = st.number_input("Importe apostado (€)", min_value=0.10, value=float(st.session_state.get("q_stake", 10.00)), step=1.0, format="%.2f", key="q_stake")
+            edit_prob = st.number_input("Probabilidad estimada (%)", min_value=0.0, max_value=100.0, value=float(st.session_state.get("q_prob", 50.0)), step=0.1, key="q_prob")
+            
+            risk_options = ["Segura", "Moderada", "Arriesgada", "Muy arriesgada"]
+            edit_risk = st.selectbox(
+                "Riesgo", 
+                risk_options, 
+                index=risk_options.index(st.session_state.get("q_risk", "Moderada")) if st.session_state.get("q_risk", "Moderada") in risk_options else risk_options.index("Moderada"),
+                key="q_risk"
+            )
+            
+            status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
+            edit_status = st.selectbox(
+                "Estado",
+                status_options,
+                index=status_options.index(st.session_state.get("q_status", "Pendiente")),
+                key="q_status"
+            )
+            
+        if st.button("ANALIZAR APUESTA CORREGIDA", use_container_width=True, key="quick_bet_analyze_corrected_btn"):
+            # Execute analysis using form values
+            est_prob_decimal = edit_prob / 100.0
+            pot_return = edit_stake * edit_odds
+            pot_profit = edit_stake * (edit_odds - 1.0)
+            
+            if edit_status == "Ganada":
+                profit_val = float(edit_stake * (edit_odds - 1.0))
+            elif edit_status == "Perdida":
+                profit_val = float(-edit_stake)
+            else:
+                profit_val = 0.0
+                
+            # Valuation and details for boosted odds
+            valoracion = ""
+            mejora_str = ""
+            fair_odds = 1.0 / est_prob_decimal if est_prob_decimal > 0 else 1.0
+            
+            if edit_is_boosted:
+                if edit_odds <= fair_odds:
+                    valoracion = "Cuota mejorada poco relevante"
+                elif edit_odds >= 1.15 * fair_odds:
+                    valoracion = "Promoción muy atractiva, revisar límite y condiciones"
+                else:
+                    valoracion = "Cuota mejorada interesante"
                     
-            # 3. Recommendation (if not boosted)
+                if edit_original_odds < edit_odds:
+                    mejora_pct = ((edit_odds - edit_original_odds) / edit_original_odds) * 100.0
+                    mejora_str = f"+{mejora_pct:.1f}%"
+                else:
+                    mejora_str = "0.0%"
+            
             recommendation = ""
-            if not is_boosted:
-                if risk_label == "Segura":
+            if not edit_is_boosted:
+                if edit_risk == "Segura":
                     recommendation = "Apuesta conservadora, beneficio limitado."
-                elif risk_label == "Moderada":
+                elif edit_risk == "Moderada":
                     recommendation = "Apuesta equilibrada, puede tener sentido con stake controlado."
-                elif risk_label == "Arriesgada":
+                elif edit_risk == "Arriesgada":
                     recommendation = "Apuesta agresiva, usar stake bajo."
                 else:
                     recommendation = "Apuesta especulativa, solo con importe muy pequeño."
-
-            # 4. Stake & potential returns
-            stake_val = float(detected_stake) if (detected_stake and detected_stake > 0.0) else 0.0
-            if stake_val == 0.0:
-                stake_val = st.number_input("No se detectó un importe. Especifica el importe (€):", min_value=0.1, value=10.0, step=1.0, key="quick_stake_input")
-                
-            pot_return = stake_val * odds
-            pot_profit = stake_val * (odds - 1.0)
             
-            # 5. Render appropriate HTML Card
-            if is_boosted:
+            st.session_state.quick_bet_final_analysis = {
+                "sport": edit_sport,
+                "competition": edit_comp,
+                "match": edit_match,
+                "betting_house": edit_house,
+                "market": edit_market,
+                "type": edit_type,
+                "is_boosted": edit_is_boosted,
+                "original_odds": edit_original_odds,
+                "odds": edit_odds,
+                "stake": edit_stake,
+                "prob": est_prob_decimal,
+                "risk": edit_risk,
+                "status": edit_status,
+                "pot_return": pot_return,
+                "pot_profit": pot_profit,
+                "profit": profit_val,
+                "valoracion": valoracion,
+                "mejora_str": mejora_str,
+                "recommendation": recommendation,
+                "fair_odds": fair_odds
+            }
+            st.rerun()
+
+        # Display final analysis if calculated
+        if "quick_bet_final_analysis" in st.session_state and st.session_state.quick_bet_final_analysis is not None:
+            analysis = st.session_state.quick_bet_final_analysis
+            
+            st.markdown("---")
+            st.subheader("Resultado del análisis")
+            
+            translated_market = translate_market_to_spanish(analysis["market"])
+            
+            if analysis["is_boosted"]:
                 html_card = f"""<div style="background-color: #111111; padding: 22px; border-radius: 12px; border: 1px solid #E30613; margin-top: 20px; margin-bottom: 20px;">
 <h3 style="color: #E30613; margin: 0 0 15px 0; text-transform: uppercase;">Apuesta promocional analizada</h3>
-<div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{bet_name}</div>
+<div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{translated_market}</div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; font-size: 14px; color: #a0aec0;">
-<div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{bet_type}</span></div>
-<div><b>Cuota original:</b> <span style="color: #ffffff;">{orig_odds_val:.2f}</span></div>
-<div><b>Cuota aumentada:</b> <span style="color: #ffffff; font-weight: bold;">{odds:.2f}</span></div>
-<div><b>Mejora de cuota:</b> <span style="color: #00C853; font-weight: bold;">{mejora_str}</span></div>
-<div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{est_prob_pct:.1f}%</span></div>
-<div><b>Cuota justa aprox.:</b> <span style="color: #ffffff;">{fair_odds:.2f}</span></div>
-<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
-<div><b>Importe:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
-<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
-<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
-<div style="grid-column: span 2;"><b>Valoración:</b> <span style="color: #ffd400; font-weight: bold;">{valoracion}</span></div>
+<div><b>Deporte:</b> <span style="color: #ffffff;">{analysis['sport']}</span></div>
+<div><b>Competición:</b> <span style="color: #ffffff;">{analysis['competition']}</span></div>
+<div><b>Partido / Evento:</b> <span style="color: #ffffff;">{analysis['match']}</span></div>
+<div><b>Casa de apuestas:</b> <span style="color: #ffffff;">{analysis['betting_house']}</span></div>
+<div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{analysis['type']}</span></div>
+<div><b>Cuota original:</b> <span style="color: #ffffff;">{analysis['original_odds']:.2f}</span></div>
+<div><b>Cuota aumentada:</b> <span style="color: #ffffff; font-weight: bold;">{analysis['odds']:.2f}</span></div>
+<div><b>Mejora de cuota:</b> <span style="color: #00C853; font-weight: bold;">{analysis['mejora_str']}</span></div>
+<div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{analysis['prob'] * 100.0:.1f}%</span></div>
+<div><b>Cuota justa aprox.:</b> <span style="color: #ffffff;">{analysis['fair_odds']:.2f}</span></div>
+<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{analysis['risk']}</span></div>
+<div><b>Importe:</b> <span style="color: #ffffff;">{analysis['stake']:.2f} €</span></div>
+<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{analysis['pot_return']:.2f} €</span></div>
+<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{analysis['pot_profit']:.2f} €</span></div>
+<div><b>Estado:</b> <span style="color: #ffffff;">{analysis['status']}</span></div>
+<div style="grid-column: span 2;"><b>Valoración:</b> <span style="color: #ffd400; font-weight: bold;">{analysis['valoracion']}</span></div>
 </div>
 </div>"""
             else:
                 html_card = f"""<div style="background-color: #111111; padding: 22px; border-radius: 12px; border: 1px solid #E30613; margin-top: 20px; margin-bottom: 20px;">
 <h3 style="color: #E30613; margin: 0 0 15px 0; text-transform: uppercase;">Apuesta analizada</h3>
-<div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{bet_name}</div>
+<div style="font-size: 18px; font-weight: bold; color: #ffffff; margin-bottom: 15px;">{translated_market}</div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; font-size: 14px; color: #a0aec0;">
-<div><b>Apuesta:</b> <span style="color: #ffffff;">{bet_name}</span></div>
-<div><b>Cuota:</b> <span style="color: #ffffff;">{odds:.2f}</span></div>
-<div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{est_prob_pct:.1f}%</span></div>
-<div><b>Tipo:</b> <span style="color: #ffffff;">{bet_type}</span></div>
-<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{risk_label}</span></div>
-<div><b>Importe:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
-<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_return:.2f} €</span></div>
-<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_profit:.2f} €</span></div>
-<div style="grid-column: span 2;"><b>Recomendación:</b> <span style="color: #ffd400; font-weight: bold;">{recommendation}</span></div>
+<div><b>Deporte:</b> <span style="color: #ffffff;">{analysis['sport']}</span></div>
+<div><b>Competición:</b> <span style="color: #ffffff;">{analysis['competition']}</span></div>
+<div><b>Partido / Evento:</b> <span style="color: #ffffff;">{analysis['match']}</span></div>
+<div><b>Casa de apuestas:</b> <span style="color: #ffffff;">{analysis['betting_house']}</span></div>
+<div><b>Cuota:</b> <span style="color: #ffffff;">{analysis['odds']:.2f}</span></div>
+<div><b>Probabilidad estimada:</b> <span style="color: #ffffff; font-weight: bold;">{analysis['prob'] * 100.0:.1f}%</span></div>
+<div><b>Tipo de apuesta:</b> <span style="color: #ffffff;">{analysis['type']}</span></div>
+<div><b>Riesgo:</b> <span style="color: #ffffff; font-weight: bold;">{analysis['risk']}</span></div>
+<div><b>Importe:</b> <span style="color: #ffffff;">{analysis['stake']:.2f} €</span></div>
+<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{analysis['pot_return']:.2f} €</span></div>
+<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{analysis['pot_profit']:.2f} €</span></div>
+<div><b>Estado:</b> <span style="color: #ffffff;">{analysis['status']}</span></div>
+<div style="grid-column: span 2;"><b>Recomendación:</b> <span style="color: #ffd400; font-weight: bold;">{analysis['recommendation']}</span></div>
 </div>
 </div>"""
             st.markdown(html_card, unsafe_allow_html=True)
-
-            # Action (GUARDAR EN CARTERA)
-            if st.button("GUARDAR EN CARTERA", use_container_width=True, key="quick_save_port_btn"):
-                now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                new_port_bet = {
-                    "id": f"quick_port_{int(time.time())}",
-                    "date_placed": now_str,
-                    "date_saved": now_str,
-                    "sport": sport_val if sport_val else "Fútbol",
-                    "competition": competition_val if competition_val else "",
-                    "match": match_val if match_val else bet_name,
-                    "betting_house": betting_house_val if betting_house_val else "Winamax",
-                    "market": bet_name,
-                    "odds": float(odds),
-                    "stake": float(stake_val),
-                    "status": "Pendiente",
-                    "potential_return": float(pot_return),
-                    "potential_profit": float(pot_profit),
-                    "profit": 0.0,
-                    "combined_bet": False,
-                    "legs": [],
-                    "estimated_probability": float(est_prob_decimal),
-                    "risk": risk_label,
-                    "type": bet_type
-                }
-                if "portfolio" not in st.session_state:
-                    st.session_state.portfolio = []
-                st.session_state.portfolio.append(new_port_bet)
-                save_portfolio()
-                st.success("¡Apuesta guardada con éxito en la cartera!")
-                time.sleep(0.5)
-                st.session_state.quick_bet_parsed = None
-                navigate_to_section("Cartera")
+            
+            col_save, col_cancel = st.columns(2)
+            with col_save:
+                if st.button("GUARDAR APUESTA EN CARTERA", use_container_width=True, key="quick_save_port_btn"):
+                    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    new_port_bet = {
+                        "id": f"quick_port_{int(time.time())}",
+                        "date_placed": now_str,
+                        "date_saved": now_str,
+                        "sport": analysis["sport"],
+                        "competition": analysis["competition"],
+                        "match": analysis["match"],
+                        "betting_house": analysis["betting_house"],
+                        "market": analysis["market"],
+                        "odds": float(analysis["odds"]),
+                        "stake": float(analysis["stake"]),
+                        "status": analysis["status"],
+                        "potential_return": float(analysis["pot_return"]),
+                        "potential_profit": float(analysis["pot_profit"]),
+                        "profit": float(analysis["profit"]),
+                        "combined_bet": False,
+                        "legs": [],
+                        "estimated_probability": float(analysis["prob"]),
+                        "risk": analysis["risk"],
+                        "type": analysis["type"]
+                    }
+                    if analysis["is_boosted"]:
+                        new_port_bet["is_boosted"] = True
+                        new_port_bet["original_odds"] = float(analysis["original_odds"])
+                        
+                    if "portfolio" not in st.session_state:
+                        st.session_state.portfolio = []
+                    st.session_state.portfolio.append(new_port_bet)
+                    save_portfolio()
+                    st.success("¡Apuesta guardada con éxito en la cartera!")
+                    time.sleep(0.5)
+                    st.session_state.quick_bet_detected = None
+                    st.session_state.quick_bet_final_analysis = None
+                    navigate_to_section("Cartera")
+                    st.rerun()
+            with col_cancel:
+                if st.button("CANCELAR", use_container_width=True, key="quick_cancel_btn"):
+                    st.session_state.quick_bet_detected = None
+                    st.session_state.quick_bet_final_analysis = None
+                    st.rerun()
 
 # ----------------------------------------------------
 # SECCIÓN: HISTORIAL DE PARTIDOS ESTUDIADOS

@@ -2432,80 +2432,189 @@ elif section == "Cartera":
         placed_bets = sorted(portfolio, key=lambda x: x.get("date_placed", ""), reverse=True)
         for idx, bet in enumerate(placed_bets):
             bet_id = bet.get("id", f"bet_{idx}")
-            m_trans = translate_market_to_spanish(bet["market"])
             
-            legs_html = ""
-            if bet.get("combined_bet"):
-                legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in bet.get("legs", [])]
-                legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+            # Check if this bet is being edited
+            if st.session_state.get("editing_bet_id") == bet_id:
+                st.markdown(f"<div style='border-left: 5px solid #ffd400; padding-left: 10px; margin-top: 15px;'><b>Editar Apuesta</b></div>", unsafe_allow_html=True)
+                col_ed1, col_ed2 = st.columns(2)
+                with col_ed1:
+                    edit_sport = st.text_input("Deporte", value=bet.get("sport", "Fútbol"), key=f"edit_sport_{bet_id}")
+                    edit_competition = st.text_input("Competición", value=bet.get("competition", ""), key=f"edit_competition_{bet_id}")
+                    edit_match = st.text_input("Partido / Evento", value=bet.get("match", ""), key=f"edit_match_{bet_id}")
+                    edit_house = st.text_input("Casa de apuestas", value=bet.get("betting_house", "Winamax"), key=f"edit_house_{bet_id}")
+                    edit_market = st.text_input("Apuesta", value=bet.get("market", ""), key=f"edit_market_{bet_id}")
+                    
+                    bet_types_list = ["Resultado", "Goles", "Córners", "Tarjetas", "Hándicap", "Clasificación / Grupo", "Jugador", "Combinada", "Otro"]
+                    current_type = bet.get("type", "Otro")
+                    if current_type not in bet_types_list:
+                        current_type = "Otro"
+                    edit_type = st.selectbox(
+                        "Tipo de apuesta",
+                        bet_types_list,
+                        index=bet_types_list.index(current_type),
+                        key=f"edit_type_{bet_id}"
+                    )
+                with col_ed2:
+                    edit_odds = st.number_input("Cuota", min_value=1.01, value=float(bet.get("odds", 2.00)), step=0.01, format="%.2f", key=f"edit_odds_{bet_id}")
+                    edit_stake = st.number_input("Importe apostado (€)", min_value=0.1, value=float(bet.get("stake", 10.00)), step=0.5, format="%.2f", key=f"edit_stake_{bet_id}")
+                    
+                    status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
+                    current_status = bet.get("status", "Pendiente")
+                    if current_status not in status_options:
+                        current_status = "Pendiente"
+                    edit_status = st.selectbox(
+                        "Estado",
+                        status_options,
+                        index=status_options.index(current_status),
+                        key=f"edit_status_{bet_id}"
+                    )
+                    
+                    edit_prob = None
+                    if "estimated_probability" in bet:
+                        val_prob = float(bet["estimated_probability"])
+                        if val_prob > 1.0:
+                            val_prob = val_prob / 100.0
+                        edit_prob = st.number_input("Probabilidad estimada (0.0 - 1.0)", min_value=0.0, max_value=1.0, value=val_prob, step=0.01, key=f"edit_prob_{bet_id}")
+                        
+                    edit_risk = None
+                    if "risk" in bet:
+                        orig_risk = bet["risk"]
+                        if isinstance(orig_risk, (int, float)):
+                            edit_risk = st.number_input("Riesgo", value=float(orig_risk), step=0.1, key=f"edit_risk_{bet_id}")
+                        else:
+                            edit_risk = st.text_input("Riesgo", value=str(orig_risk), key=f"edit_risk_{bet_id}")
+                            
+                col_eb1, col_eb2 = st.columns(2)
+                with col_eb1:
+                    if st.button("GUARDAR CAMBIOS", key=f"save_edit_btn_{bet_id}", use_container_width=True):
+                        for b in st.session_state.portfolio:
+                            if b.get("id") == bet_id:
+                                b["sport"] = edit_sport
+                                b["competition"] = edit_competition
+                                b["match"] = edit_match
+                                b["betting_house"] = edit_house
+                                b["market"] = edit_market
+                                b["type"] = edit_type
+                                b["odds"] = float(edit_odds)
+                                b["stake"] = float(edit_stake)
+                                b["status"] = edit_status
+                                if edit_prob is not None:
+                                    b["estimated_probability"] = float(edit_prob)
+                                if edit_risk is not None:
+                                    b["risk"] = edit_risk
+                                    
+                                # Recalculate return, potential profit, and real profit/loss
+                                b["potential_return"] = float(edit_stake * edit_odds)
+                                b["potential_profit"] = float(edit_stake * (edit_odds - 1.0))
+                                
+                                if edit_status == "Ganada":
+                                    b["profit"] = float(edit_stake * (edit_odds - 1.0))
+                                elif edit_status == "Perdida":
+                                    b["profit"] = float(-edit_stake)
+                                else:
+                                    b["profit"] = 0.0
+                                break
+                        save_portfolio()
+                        st.session_state.editing_bet_id = None
+                        st.success("¡Cambios guardados con éxito!")
+                        st.rerun()
+                with col_eb2:
+                    if st.button("CANCELAR", key=f"cancel_edit_btn_{bet_id}", use_container_width=True):
+                        st.session_state.editing_bet_id = None
+                        st.rerun()
             else:
-                legs_html = f"<div style='margin-bottom: 8px; font-weight: bold; color: #ffffff;'>{m_trans}</div>"
+                m_trans = translate_market_to_spanish(bet.get("market", ""))
                 
-            status_curr = bet.get("status", "Pendiente")
-            if status_curr == "Ganada":
-                profit_color = "#00C853"
-                profit_prefix = "+"
-            elif status_curr == "Perdida":
-                profit_color = "#FF3B3B"
-                profit_prefix = ""
-            else:
-                profit_color = "#a0aec0"
-                profit_prefix = ""
-                
-            st.markdown(f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
+                legs_html = ""
+                if bet.get("combined_bet"):
+                    legs_list = [f"<li>{translate_market_to_spanish(leg['market'])} (@{leg['odds']:.2f})</li>" for leg in bet.get("legs", [])]
+                    legs_html = f"<ol style='margin: 5px 0; padding-left: 20px; color: #a0aec0;'>{''.join(legs_list)}</ol>"
+                else:
+                    legs_html = f"<div style='margin-bottom: 8px; color: #ffffff;'><b>Apuesta:</b> {m_trans}</div>"
+                    
+                status_curr = bet.get("status", "Pendiente")
+                if status_curr == "Ganada":
+                    profit_color = "#00C853"
+                    profit_prefix = "+"
+                elif status_curr == "Perdida":
+                    profit_color = "#FF3B3B"
+                    profit_prefix = ""
+                elif status_curr == "Nula":
+                    profit_color = "#e2e8f0"
+                    profit_prefix = ""
+                else:
+                    profit_color = "#ffd400"
+                    profit_prefix = ""
+                    
+                # Closed display
+                closed_html = ""
+                if status_curr != "Pendiente":
+                    closed_html = f"<div><b>Resultado real:</b> <span style='color: {profit_color}; font-weight: bold;'>{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>"
+                else:
+                    closed_html = f"<div><b>Resultado real:</b> <span style='color: #a0aec0;'>N/A (Pendiente)</span></div>"
+                    
+                # Extra fields if present
+                extra_metrics_html = ""
+                if "estimated_probability" in bet:
+                    prob_pct = bet["estimated_probability"] * 100.0 if bet["estimated_probability"] <= 1.0 else bet["estimated_probability"]
+                    extra_metrics_html += f"<div><b>Prob. estimada:</b> <span style='color: #ffffff;'>{prob_pct:.1f}%</span></div>"
+                if "risk" in bet:
+                    extra_metrics_html += f"<div><b>Riesgo:</b> <span style='color: #ffffff;'>{bet['risk']}</span></div>"
+
+                # Calculate potential return & profit
+                stake_val = float(bet.get("stake", 0.0))
+                odds_val = float(bet.get("odds", 0.0))
+                pot_ret = stake_val * odds_val
+                pot_prof = stake_val * (odds_val - 1.0)
+
+                st.markdown(f"""<div style="background-color: #111111; padding: 18px; border-radius: 10px 10px 0 0; border-left: 5px solid {profit_color}; border-top: 1px solid #222222; border-right: 1px solid #222222; border-bottom: 1px solid #222222; margin-top: 15px;">
 <div style="display: flex; justify-content: space-between; font-size: 12px; color: #a0aec0; margin-bottom: 5px;">
 <span>Realizada: {bet.get('date_placed', '')}</span>
-<span style="color: #ffd400; font-weight: bold;">{bet.get('betting_house', '')}</span>
+<span style="color: #ffd400; font-weight: bold;">Casa: {bet.get('betting_house', '')}</span>
 </div>
-<div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">{bet.get('match', '')}</div>
-<div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">{bet.get('competition', '')}</div>
+<div style="font-size: 15px; font-weight: bold; color: #ffffff; margin-bottom: 3px;">Partido/Evento: {bet.get('match', '')}</div>
+<div style="font-size: 13px; color: #a0aec0; margin-bottom: 8px;">Competición: {bet.get('competition', '')} | Deporte: {bet.get('sport', 'Fútbol')}</div>
 {legs_html}
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
-<div>Cuota: <span style="color: #ffffff;">{bet['odds']:.2f}</span></div>
-<div>Importe apostado: <span style="color: #ffffff;">{bet['stake']:.2f} €</span></div>
-<div>Retorno potencial: <span style="color: #ffffff;">{(bet['stake'] * bet['odds']):.2f} €</span></div>
-<div>Resultado: <span style="color: {profit_color}; font-weight: bold;">{profit_prefix}{bet.get('profit', 0.0):.2f} €</span></div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; font-size: 13px; color: #a0aec0; margin-top: 10px;">
+<div><b>Cuota:</b> <span style="color: #ffffff;">{odds_val:.2f}</span></div>
+<div><b>Importe:</b> <span style="color: #ffffff;">{stake_val:.2f} €</span></div>
+<div><b>Estado:</b> <span style="color: {profit_color}; font-weight: bold;">{status_curr}</span></div>
+<div><b>Retorno potencial:</b> <span style="color: #ffffff;">{pot_ret:.2f} €</span></div>
+<div><b>Beneficio potencial:</b> <span style="color: #00C853; font-weight: bold;">{pot_prof:.2f} €</span></div>
+{closed_html}
+{extra_metrics_html}
 </div>
 </div>""", unsafe_allow_html=True)
-            
-            ctrl_col1, ctrl_col2 = st.columns([3, 1])
-            with ctrl_col1:
-                status_options = ["Pendiente", "Ganada", "Perdida", "Nula"]
-                try:
-                    status_idx = status_options.index(status_curr)
-                except ValueError:
-                    status_idx = 0
-                    
-                new_status = st.selectbox(
-                    "Estado de la apuesta",
-                    status_options,
-                    index=status_idx,
-                    key=f"cart_status_select_{bet_id}_{idx}",
-                    label_visibility="collapsed"
-                )
                 
-                if new_status != status_curr:
-                    for b in st.session_state.portfolio:
-                        if b.get("id") == bet_id:
-                            b["status"] = new_status
-                            if new_status == "Ganada":
-                                b["profit"] = b["stake"] * (b["odds"] - 1.0)
-                            elif new_status == "Perdida":
-                                b["profit"] = -b["stake"]
-                            else:
-                                b["profit"] = 0.0
-                            break
-                    save_portfolio()
-                    st.rerun()
-                    
-            with ctrl_col2:
-                if st.button("Eliminar", key=f"cart_delete_port_{bet_id}_{idx}"):
-                    for b in st.session_state.portfolio:
-                        if b.get("id") == bet_id:
-                            st.session_state.portfolio.remove(b)
-                            break
-                    save_portfolio()
-                    st.rerun()
+                col_ctrl1, col_ctrl2 = st.columns(2)
+                with col_ctrl1:
+                    if st.button("EDITAR", key=f"btn_edit_{bet_id}"):
+                        st.session_state.editing_bet_id = bet_id
+                        st.rerun()
+                        
+                with col_ctrl2:
+                    if st.session_state.get("confirm_delete_id") == bet_id:
+                        col_del_c1, col_del_c2 = st.columns(2)
+                        with col_del_c1:
+                            if st.button("CONFIRMAR ELIMINACIÓN", key=f"btn_confirm_del_{bet_id}", use_container_width=True):
+                                for b in st.session_state.portfolio:
+                                    if b.get("id") == bet_id:
+                                        st.session_state.portfolio.remove(b)
+                                        break
+                                save_portfolio()
+                                st.session_state.confirm_delete_id = None
+                                if st.session_state.get("editing_bet_id") == bet_id:
+                                    st.session_state.editing_bet_id = None
+                                st.success("Apuesta eliminada.")
+                                st.rerun()
+                        with col_del_c2:
+                            if st.button("CANCELAR ELIMINACIÓN", key=f"btn_cancel_del_{bet_id}", use_container_width=True):
+                                st.session_state.confirm_delete_id = None
+                                st.rerun()
+                    else:
+                        if st.button("ELIMINAR", key=f"btn_delete_{bet_id}"):
+                            st.session_state.confirm_delete_id = bet_id
+                            st.rerun()
 
     # Manual bet entry form/section (PART 1)
     st.markdown("---")
